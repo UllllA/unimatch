@@ -171,6 +171,12 @@ export const SORT_OPTIONS = [
   ['uni', 'Вуз А–Я'],
 ];
 
+/** Короткие подписи для кнопки сортировки на телефоне. */
+export const SORT_SHORT = {
+  'score-desc': 'Балл ↓', 'score-asc': 'Балл ↑', 'margin-desc': 'Мой запас', 'trend-desc': 'Рост балла',
+  'cost-asc': 'Дешевле', name: 'Направление', uni: 'Вуз А–Я',
+};
+
 export function sortItems(items, key) {
   const primary = SORTERS[key] ?? SORTERS['score-desc'];
   return items.sort((a, b) => primary(a, b) || collator.compare(a.p.name, b.p.name) || a.p.id - b.p.id);

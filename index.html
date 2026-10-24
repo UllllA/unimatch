@@ -111,9 +111,10 @@
           <div class="fbar__row">
             <div class="search">
               <span class="search__icon" aria-hidden="true">🔍</span>
-              <input type="search" id="q" placeholder="Поиск: направление, вуз, регион, код" aria-label="Поиск по направлениям, вузам и регионам" autocomplete="off">
+              <input type="search" id="q" placeholder="Вуз, направление или код" aria-label="Поиск по направлениям, вузам и регионам" autocomplete="off">
             </div>
             <button type="button" class="mfilters" id="mFilters" aria-haspopup="dialog">⚙ Фильтры <span class="count" id="mFiltersCount" hidden>0</span></button>
+            <button type="button" class="msort" data-pop="sort" aria-haspopup="dialog" aria-expanded="false">↕ <span id="mSortLabel">Балл ↓</span></button>
             <label class="sort">
               <span class="sort__label">Сортировка</span>
               <select id="sort" aria-label="Сортировка"></select>

@@ -184,7 +184,7 @@ export function renderCard(item, index, state) {
       <span class="avatar" style="--av:${avatarColor(uni.id)}" aria-hidden="true">${esc(uniInitials(uni.name))}</span>
       <div class="card__uni">
         <span class="card__uni-name" title="${esc(uni.fullName)}">${esc(uni.name)}</span>
-        ${uni.cityName ? `<span class="card__city">${esc(uni.cityName)}</span>` : ''}
+        ${uni.cityName ? `<span class="card__city" title="${esc(uni.cityName)}">${esc(uni.cityName.split(' и ')[0])}</span>` : ''}
       </div>
       ${renderScore(p, item, state)}
     </div>
@@ -197,7 +197,7 @@ export function renderCard(item, index, state) {
         : '<span class="cost cost--none">💰 Цена платного: нет данных</span>'}
     </div>
     ${p.faculty || state.showScores ? `<div class="card__foot">
-      ${p.faculty ? `<span class="card__faculty">${esc(p.faculty)}</span>` : ''}
+      ${p.faculty ? `<span class="card__faculty" title="${esc(p.faculty)}">${esc(p.faculty)}</span>` : ''}
       ${renderMine(item, state)}
     </div>` : ''}
     <div class="card__links">

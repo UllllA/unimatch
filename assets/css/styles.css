@@ -730,3 +730,18 @@ body.sheet-open { overflow: hidden; }
   .mchip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 }
 @media (min-width: 721px) { .fsheet, .backdrop--sheet { display: none !important; } }
+
+/* ---------- ничего не обрезаем: длинное переносится ---------- */
+.card__uni-name { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.2; }
+.card__faculty { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.frow__value { white-space: normal; }
+.msort { display: none; }
+.option:disabled { opacity: 0.5; cursor: default; }
+@media (max-width: 720px) {
+  .fbar .sort { display: none; }
+  .msort {
+    display: inline-flex; align-items: center; justify-content: center; gap: 0.35rem; height: 40px; border: 1.5px solid var(--border);
+    border-radius: 13px; background: var(--surface-2); font-weight: 700; font-size: 0.9rem; color: var(--text); cursor: pointer; white-space: nowrap;
+  }
+  .msort[aria-expanded='true'] { border-color: var(--violet); }
+}

@@ -1,5 +1,5 @@
 import {
-  buildIndex, computeResults, hasScoreFilter, normalizeText, pluralize, effectiveSubjects, MIN_SUBJECTS, LOCKED_SUBJECTS, SORT_OPTIONS,
+  buildIndex, computeResults, hasScoreFilter, normalizeText, pluralize, effectiveSubjects, MIN_SUBJECTS, LOCKED_SUBJECTS, SORT_OPTIONS, SORT_SHORT,
 } from './filters.js';
 import { defaultState, readState, writeState } from './state.js';
 import { AREAS, FORMS } from './catalog.js';
@@ -317,7 +317,7 @@ function resetFilters() {
 // Регионы, которые ищут чаще всего: закреплены наверху списка.
 const POPULAR_CITIES = ['Москва', 'Санкт-Петербург'];
 
-const POP_TITLES = { city: 'Регион', uni: 'Вуз', dir: 'Направление', form: 'Форма и уровень', score: 'Проходной балл' };
+const POP_TITLES = { sort: 'Сортировка', city: 'Регион', uni: 'Вуз', dir: 'Направление', form: 'Форма и уровень', score: 'Проходной балл' };
 const isSheet = () => matchMedia('(max-width: 720px)').matches;
 
 function togglePop(kind, btn) {
@@ -389,6 +389,17 @@ function renderPopBody() {
       const opt = e.target.closest('.option');
       if (opt) chooseOption(opt.dataset.value);
     });
+  } else if (kind === 'sort') {
+    // На телефоне вместо обрезанного списка — окно с полными названиями сортировки
+    el.popBody.innerHTML = `<ul class="options" role="listbox" aria-label="Сортировка">${[...el.sort.options].map((o) => `
+      <li><button type="button" class="option${o.value === state.sort ? ' is-selected' : ''}" data-sort="${esc(o.value)}" role="option"
+        aria-selected="${o.value === state.sort}"${o.disabled ? ' disabled' : ''}><span class="option__main">${esc(o.textContent)}
+        ${o.disabled ? '<small>Сначала включи «Ввести мои баллы»</small>' : ''}</span></button></li>`).join('')}</ul>`;
+    el.popBody.querySelectorAll('[data-sort]').forEach((b) => b.addEventListener('click', () => {
+      state.sort = b.dataset.sort;
+      closePop(true);
+      update();
+    }));
   } else if (kind === 'form') {
     const forms = FORMS.filter((f) => index.programs.some((p) => p.form === f));
     const levels = [...new Set(index.programs.map((p) => p.level).filter(Boolean))].sort();
@@ -586,6 +597,7 @@ function syncControls() {
   const marginOpt = el.sort.querySelector('[value="margin-desc"]');
   if (marginOpt) marginOpt.disabled = !state.showScores;
   el.sort.value = state.sort;
+  $('mSortLabel').textContent = SORT_SHORT[state.sort] ?? 'Балл ↓';
 }
 
 /** Включённые фильтры плашками с крестиком (видны на телефоне под поиском). */
