@@ -17,6 +17,8 @@ const el = {
   q: $('q'), sort: $('sort'), summary: $('resultsSummary'),
   results: $('results'), cards: $('cards'), pager: $('pager'), empty: $('emptyState'), theme: $('themeToggle'),
   pop: $('popover'), popTitle: $('popTitle'), popBody: $('popBody'), popClose: $('popClose'), popBackdrop: $('popBackdrop'),
+  sheet: $('filterSheet'), sheetBackdrop: $('fsheetBackdrop'), mFilters: $('mFilters'), mCount: $('mFiltersCount'),
+  mChips: $('mChips'), mBudget: $('mBudget'), mFits: $('mFits'), mShow: $('mShow'),
   dataInfo: $('dataInfo'), premiumBtn: $('premiumBtn'), premium: $('premiumDialog'),
   premiumBuy: $('premiumBuy'), premiumThanks: $('premiumThanks'),
 };
@@ -156,6 +158,33 @@ function bindEvents() {
   });
   el.budget.addEventListener('click', () => { state.budgetOnly = !state.budgetOnly; update(); });
   el.fits.addEventListener('click', () => { state.fits = !state.fits; update(); });
+
+  // Телефон: все фильтры в шторке снизу, включённые — плашками под поиском
+  el.mFilters.addEventListener('click', openSheet);
+  $('fsheetClose').addEventListener('click', closeSheet);
+  el.sheetBackdrop.addEventListener('click', closeSheet);
+  el.sheet.addEventListener('click', (e) => {
+    const row = e.target.closest('[data-pop]');
+    if (row) togglePop(row.dataset.pop, row);
+  });
+  el.mBudget.addEventListener('click', () => { state.budgetOnly = !state.budgetOnly; update(); });
+  el.mFits.addEventListener('click', () => { state.fits = !state.fits; update(); });
+  $('mReset').addEventListener('click', resetFilters);
+  el.mShow.addEventListener('click', () => {
+    closeSheet();
+    el.results.scrollIntoView({ block: 'start' });
+  });
+  el.mChips.addEventListener('click', (e) => {
+    const chip = e.target.closest('[data-clear]');
+    if (!chip) return;
+    const kind = chip.dataset.clear;
+    if (kind === 'form') { state.forms.clear(); state.levels.clear(); }
+    else if (kind === 'score') { state.min = null; state.max = null; }
+    else if (kind === 'budget') state.budgetOnly = false;
+    else if (kind === 'fits') state.fits = false;
+    else state[kind] = kind === 'dir' ? '' : null;
+    update();
+  });
   el.resetFilters.addEventListener('click', resetFilters);
   el.q.addEventListener('input', debounce(() => { state.q = el.q.value.trim(); update(); }, 180));
   el.sort.addEventListener('change', () => { state.sort = el.sort.value; update(); });
@@ -180,7 +209,9 @@ function bindEvents() {
     if (openPop && !el.pop.contains(e.target) && !e.target.closest('[data-pop]') && !isSheet()) closePop(false);
   });
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && openPop) closePop(true);
+    if (e.key !== 'Escape') return;
+    if (openPop) closePop(true);
+    else if (!el.sheet.hidden) closeSheet();
   });
   const reposition = () => openPop && positionPop();
   window.addEventListener('resize', reposition);
@@ -230,6 +261,22 @@ function bindEvents() {
     if (e.target === el.premium || e.target.closest('[data-close]')) el.premium.close();
   });
   el.premiumBuy.addEventListener('click', () => { el.premiumThanks.hidden = false; });
+}
+
+function openSheet() {
+  el.sheet.hidden = false;
+  el.sheetBackdrop.hidden = false;
+  document.body.classList.add('sheet-open');
+  $('fsheetClose').focus({ preventScroll: true });
+}
+
+function closeSheet() {
+  if (el.sheet.hidden) return;
+  closePop(false);
+  el.sheet.hidden = true;
+  el.sheetBackdrop.hidden = true;
+  document.body.classList.remove('sheet-open');
+  el.mFilters.focus({ preventScroll: true });
 }
 
 function openPremium() {
@@ -505,8 +552,13 @@ function update() {
   syncCollections();
 }
 
+const ANY = { city: 'Все регионы', uni: 'Все вузы', dir: 'Все направления', form: 'Любые', score: 'Любой' };
+
 function setPill(kind, value, full = value) {
-  const pill = el.fbar.querySelector(`[data-pop="${kind}"]`);
+  const row = el.sheet.querySelector(`[data-pop="${kind}"]`);
+  row.classList.toggle('is-active', Boolean(value));
+  row.querySelector('.frow__value').textContent = full || ANY[kind];
+  const pill = el.fbar.querySelector(`.fpill[data-pop="${kind}"]`);
   pill.classList.toggle('is-active', Boolean(value));
   pill.querySelector('.fpill__label').textContent = value || POP_TITLES[kind];
   pill.title = value ? `${POP_TITLES[kind]}: ${full}` : '';
@@ -525,11 +577,33 @@ function syncControls() {
   el.fits.hidden = !state.showScores;
   el.fits.setAttribute('aria-pressed', String(state.fits));
   el.resetFilters.hidden = !hasActiveFilters();
+  el.mBudget.setAttribute('aria-pressed', String(state.budgetOnly));
+  el.mFits.hidden = !state.showScores;
+  el.mFits.setAttribute('aria-pressed', String(state.fits));
+  renderChips();
   el.scoresToggle.checked = state.showScores;
   if (el.q.value.trim() !== state.q) el.q.value = state.q;
   const marginOpt = el.sort.querySelector('[value="margin-desc"]');
   if (marginOpt) marginOpt.disabled = !state.showScores;
   el.sort.value = state.sort;
+}
+
+/** Включённые фильтры плашками с крестиком (видны на телефоне под поиском). */
+function renderChips() {
+  const cityName = state.city ? index.cities.get(state.city)?.name ?? '' : '';
+  const chips = [
+    state.city && ['city', `📍 ${cityName.split(' и ')[0]}`],
+    state.uni && ['uni', `🏛️ ${index.unis.get(state.uni)?.name ?? ''}`],
+    state.dir && ['dir', `🧭 ${index.programs.find((p) => p.dirKey === state.dir)?.name ?? ''}`],
+    (state.forms.size || state.levels.size) && ['form', `🗓️ ${[...state.forms, ...state.levels].join(', ')}`],
+    hasScoreFilter(state, index.scoreBounds) && ['score', `🎯 ${state.min ?? index.scoreBounds.min}–${state.max ?? index.scoreBounds.max}`],
+    state.budgetOnly && ['budget', 'Только бюджет'],
+    state.fits && ['fits', 'Хватает баллов'],
+  ].filter(Boolean);
+  el.mChips.innerHTML = chips.map(([kind, text]) =>
+    `<button type="button" class="mchip" data-clear="${kind}" aria-label="Убрать фильтр: ${esc(text)}"><span>${esc(text)}</span> ✕</button>`).join('');
+  el.mCount.textContent = chips.length;
+  el.mCount.hidden = !chips.length;
 }
 
 function hasActiveFilters() {
@@ -547,6 +621,10 @@ function renderSubjectsHint() {
 }
 
 function renderSummary() {
+  const found = results.ready ? results.items.length : 0;
+  el.mShow.textContent = results.ready
+    ? (found ? `Показать ${found.toLocaleString('ru')} ${pluralize(found, 'программу', 'программы', 'программ')}` : 'Ничего не нашлось')
+    : 'Сначала выбери предметы';
   if (!results.ready) {
     el.summary.textContent = 'Выбери предметы, чтобы увидеть направления';
     return;

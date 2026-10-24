@@ -113,11 +113,13 @@
               <span class="search__icon" aria-hidden="true">🔍</span>
               <input type="search" id="q" placeholder="Поиск: направление, вуз, регион, код" aria-label="Поиск по направлениям, вузам и регионам" autocomplete="off">
             </div>
+            <button type="button" class="mfilters" id="mFilters" aria-haspopup="dialog">⚙ Фильтры <span class="count" id="mFiltersCount" hidden>0</span></button>
             <label class="sort">
               <span class="sort__label">Сортировка</span>
               <select id="sort" aria-label="Сортировка"></select>
             </label>
           </div>
+          <div class="mchips" id="mChips" aria-label="Включённые фильтры"></div>
           <div class="fbar__pills" role="toolbar" aria-label="Фильтры">
             <div class="fbar__group">
               <button type="button" class="fpill" data-pop="city" aria-haspopup="dialog" aria-expanded="false">
@@ -168,6 +170,49 @@
     <div class="sheet__head"><h2 id="cmpTitle">⚖ Сравнение программ</h2><button type="button" class="icon-btn" data-close aria-label="Закрыть">✕</button></div>
     <div class="sheet__body"><div class="cmp-scroll" id="cmpTable"></div></div>
   </dialog>
+
+  <div class="fsheet" id="filterSheet" role="dialog" aria-modal="true" aria-labelledby="fsheetTitle" hidden>
+    <div class="fsheet__head">
+      <b id="fsheetTitle">Фильтры</b>
+      <button type="button" class="icon-btn" id="fsheetClose" aria-label="Закрыть">✕</button>
+    </div>
+    <div class="fsheet__body">
+      <button type="button" class="frow" data-pop="city" aria-haspopup="dialog" aria-expanded="false">
+        <span class="frow__icon" aria-hidden="true">📍</span>
+        <span class="frow__text"><span class="frow__name">Регион</span><span class="frow__value">Все регионы</span></span>
+        <span class="frow__arrow" aria-hidden="true">›</span>
+      </button>
+      <button type="button" class="frow" data-pop="uni" aria-haspopup="dialog" aria-expanded="false">
+        <span class="frow__icon" aria-hidden="true">🏛️</span>
+        <span class="frow__text"><span class="frow__name">Вуз</span><span class="frow__value">Все вузы</span></span>
+        <span class="frow__arrow" aria-hidden="true">›</span>
+      </button>
+      <button type="button" class="frow" data-pop="dir" aria-haspopup="dialog" aria-expanded="false">
+        <span class="frow__icon" aria-hidden="true">🧭</span>
+        <span class="frow__text"><span class="frow__name">Направление</span><span class="frow__value">Все направления</span></span>
+        <span class="frow__arrow" aria-hidden="true">›</span>
+      </button>
+      <button type="button" class="frow" data-pop="form" aria-haspopup="dialog" aria-expanded="false">
+        <span class="frow__icon" aria-hidden="true">🗓️</span>
+        <span class="frow__text"><span class="frow__name">Форма и уровень</span><span class="frow__value">Любые</span></span>
+        <span class="frow__arrow" aria-hidden="true">›</span>
+      </button>
+      <button type="button" class="frow" data-pop="score" aria-haspopup="dialog" aria-expanded="false">
+        <span class="frow__icon" aria-hidden="true">🎯</span>
+        <span class="frow__text"><span class="frow__name">Проходной балл</span><span class="frow__value">Любой</span></span>
+        <span class="frow__arrow" aria-hidden="true">›</span>
+      </button>
+      <div class="fsheet__checks">
+        <button type="button" class="fcheck" id="mBudget" aria-pressed="false"><span class="fcheck__box" aria-hidden="true"></span>Только бюджет</button>
+        <button type="button" class="fcheck" id="mFits" aria-pressed="false" hidden><span class="fcheck__box" aria-hidden="true"></span>Хватает моих баллов</button>
+      </div>
+    </div>
+    <div class="fsheet__foot">
+      <button type="button" class="btn btn--ghost" id="mReset">Сбросить</button>
+      <button type="button" class="btn btn--primary" id="mShow">Показать</button>
+    </div>
+  </div>
+  <div class="backdrop backdrop--sheet" id="fsheetBackdrop" hidden></div>
 
   <div class="popover" id="popover" role="dialog" aria-modal="false" aria-labelledby="popTitle" hidden>
     <div class="popover__head">
