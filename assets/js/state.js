@@ -1,9 +1,10 @@
 // Состояние подбора и его синхронизация с адресной строкой (ссылкой на подборку можно поделиться).
-import { LOCKED_SUBJECT } from './filters.js';
+import { LOCKED_SUBJECTS } from './filters.js';
 
 export function defaultState() {
   return {
-    subjects: new Set([LOCKED_SUBJECT]),
+    subjects: new Set(LOCKED_SUBJECTS),
+    mathBase: false,
     myScores: {},
     showScores: false,
     city: null,
@@ -34,6 +35,7 @@ export function readState(index, search = location.search) {
     if (index.subjects.has(id) && score != null && score <= 100) state.myScores[id] = score;
   }
   state.showScores = params.get('ms') === '1';
+  state.mathBase = params.get('mb') === '1';
 
   const city = int(params.get('city'));
   if (city != null && index.cities.has(city)) state.city = city;
@@ -61,8 +63,9 @@ function clamp(value, min, max) {
 
 export function writeState(state, index) {
   const params = new URLSearchParams();
-  const extra = [...state.subjects].filter((s) => s !== LOCKED_SUBJECT);
+  const extra = [...state.subjects].filter((s) => !LOCKED_SUBJECTS.includes(s));
   if (extra.length) params.set('s', extra.join(','));
+  if (state.mathBase) params.set('mb', '1');
   const scores = Object.entries(state.myScores)
     .filter(([id, v]) => v != null && state.subjects.has(id))
     .map(([id, v]) => `${id}:${v}`);

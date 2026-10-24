@@ -1,5 +1,5 @@
 import {
-  buildIndex, computeResults, hasScoreFilter, normalizeText, pluralize, MIN_SUBJECTS, LOCKED_SUBJECT, SORT_OPTIONS,
+  buildIndex, computeResults, hasScoreFilter, normalizeText, pluralize, effectiveSubjects, MIN_SUBJECTS, LOCKED_SUBJECTS, SORT_OPTIONS,
 } from './filters.js';
 import { defaultState, readState, writeState } from './state.js';
 import { AREAS, FORMS } from './catalog.js';
@@ -15,7 +15,7 @@ const el = {
   resetSubjects: $('resetSubjects'),
   fbar: $('filterBar'), budget: $('budgetToggle'), fits: $('fitsToggle'), resetFilters: $('resetFilters'),
   q: $('q'), sort: $('sort'), summary: $('resultsSummary'),
-  cards: $('cards'), more: $('moreBtn'), empty: $('emptyState'),
+  results: $('results'), cards: $('cards'), pager: $('pager'), empty: $('emptyState'), theme: $('themeToggle'),
   pop: $('popover'), popTitle: $('popTitle'), popBody: $('popBody'), popClose: $('popClose'), popBackdrop: $('popBackdrop'),
   dataInfo: $('dataInfo'), premiumBtn: $('premiumBtn'), premium: $('premiumDialog'),
   premiumBuy: $('premiumBuy'), premiumThanks: $('premiumThanks'),
@@ -24,7 +24,7 @@ const el = {
 let index;
 let state;
 let results;
-let shown = PAGE_SIZE;
+let page = 1;
 let openPop = null; // { kind, btn }
 const lists = {};
 
@@ -105,10 +105,16 @@ function setupStatic() {
 
 function bindEvents() {
   el.subjects.addEventListener('click', (e) => {
+    const level = e.target.closest('[data-math]');
+    if (level) {
+      state.mathBase = level.dataset.math === 'base';
+      update();
+      return;
+    }
     const btn = e.target.closest('.subject__toggle');
     if (!btn) return;
     const id = btn.closest('.subject').dataset.id;
-    if (id === LOCKED_SUBJECT) return;
+    if (LOCKED_SUBJECTS.includes(id)) return;
     state.subjects.has(id) ? state.subjects.delete(id) : state.subjects.add(id);
     update();
   });
@@ -138,7 +144,8 @@ function bindEvents() {
     if (state.showScores) el.subjects.querySelector('.is-selected input')?.focus();
   });
   el.resetSubjects.addEventListener('click', () => {
-    state.subjects = new Set([LOCKED_SUBJECT]);
+    state.subjects = new Set(LOCKED_SUBJECTS);
+    state.mathBase = false;
     state.myScores = {};
     update();
   });
@@ -152,10 +159,15 @@ function bindEvents() {
   el.resetFilters.addEventListener('click', resetFilters);
   el.q.addEventListener('input', debounce(() => { state.q = el.q.value.trim(); update(); }, 180));
   el.sort.addEventListener('change', () => { state.sort = el.sort.value; update(); });
-  el.more.addEventListener('click', () => {
-    const from = shown;
-    shown += PAGE_SIZE;
-    renderCards(from);
+  el.pager.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-page]');
+    if (!btn || btn.disabled) return;
+    page = Number(btn.dataset.page);
+    renderCards();
+    el.results.scrollIntoView({ block: 'start' });
+  });
+  el.cards.addEventListener('click', (e) => {
+    if (e.target.closest('[data-premium]')) openPremium();
   });
   el.empty.addEventListener('click', (e) => {
     if (e.target.closest('[data-action="reset-filters"]')) resetFilters();
@@ -210,14 +222,37 @@ function bindEvents() {
     d.addEventListener('click', (e) => { if (e.target === d || e.target.closest('[data-close]')) d.close(); });
   }
 
-  el.premiumBtn.addEventListener('click', () => {
-    el.premiumThanks.hidden = true;
-    el.premium.showModal();
-  });
+  el.premiumBtn.addEventListener('click', openPremium);
+  document.querySelectorAll('.plans [data-premium]').forEach((b) => b.addEventListener('click', openPremium));
+  el.theme.addEventListener('click', () => setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'));
+  syncTheme();
   el.premium.addEventListener('click', (e) => {
     if (e.target === el.premium || e.target.closest('[data-close]')) el.premium.close();
   });
   el.premiumBuy.addEventListener('click', () => { el.premiumThanks.hidden = false; });
+}
+
+function openPremium() {
+  el.premiumThanks.hidden = true;
+  el.premium.showModal();
+}
+
+// Тема: по умолчанию светлая, выбор запоминается в этом браузере.
+function setTheme(theme) {
+  if (theme === 'dark') document.documentElement.dataset.theme = 'dark';
+  else delete document.documentElement.dataset.theme;
+  try {
+    localStorage.setItem('unimatch:theme', theme);
+  } catch {
+    // без localStorage тема просто не запомнится
+  }
+  syncTheme();
+}
+
+function syncTheme() {
+  const dark = document.documentElement.dataset.theme === 'dark';
+  el.theme.setAttribute('aria-checked', String(dark));
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#121020' : '#6c4cf1');
 }
 
 function resetFilters() {
@@ -231,6 +266,9 @@ function resetFilters() {
 }
 
 // ------------------------------------------------------------------ всплывающие окна
+
+// Регионы, которые ищут чаще всего: закреплены наверху списка.
+const POPULAR_CITIES = ['Москва', 'Санкт-Петербург'];
 
 const POP_TITLES = { city: 'Регион', uni: 'Вуз', dir: 'Направление', form: 'Форма и уровень', score: 'Проходной балл' };
 const isSheet = () => matchMedia('(max-width: 720px)').matches;
@@ -413,16 +451,24 @@ function fillOptions(list, query) {
   const current = String(state[kind] ?? '');
   const anyLabel = { city: 'Все регионы', uni: state.city ? 'Все вузы региона' : 'Все вузы', dir: 'Все направления' }[kind];
   const rows = [];
+  const option = (o, star = '') => {
+    const sel = String(o.value) === current;
+    const count = o.count != null ? `<span class="option__count">${o.count}</span>` : '';
+    return `<li><button type="button" class="option${sel ? ' is-selected' : ''}" data-value="${esc(o.value)}" role="option" aria-selected="${sel}">
+      <span class="option__main">${star}${esc(o.label)}${o.sub ? `<small>${esc(o.sub)}</small>` : ''}</span>${count}</button></li>`;
+  };
   if (!words.length) {
     rows.push(`<li><button type="button" class="option${current === '' ? ' is-selected' : ''}" data-value="" role="option" aria-selected="${current === ''}">
       <span class="option__main">${anyLabel}</span><span class="option__count">${all.length}</span></button></li>`);
+    if (kind === 'city') {
+      const top = POPULAR_CITIES.map((name) => all.find((c) => c.label.startsWith(name))).filter(Boolean);
+      if (top.length) {
+        rows.push('<li class="options__head">Популярные</li>', ...top.map((o) => option(o, '<span class="option__star" aria-hidden="true">★ </span>')));
+        rows.push('<li class="options__head">Все регионы</li>');
+      }
+    }
   }
-  for (const o of found.slice(0, OPTIONS_LIMIT)) {
-    const sel = String(o.value) === current;
-    const count = o.count != null ? `<span class="option__count">${o.count}</span>` : '';
-    rows.push(`<li><button type="button" class="option${sel ? ' is-selected' : ''}" data-value="${esc(o.value)}" role="option" aria-selected="${sel}">
-      <span class="option__main">${esc(o.label)}${o.sub ? `<small>${esc(o.sub)}</small>` : ''}</span>${count}</button></li>`);
-  }
+  for (const o of found.slice(0, OPTIONS_LIMIT)) rows.push(option(o));
   if (!found.length) rows.push('<li class="options__empty">Ничего не нашлось. Попробуй по-другому, например «мирэа» или «казань».</li>');
   if (found.length > OPTIONS_LIMIT) rows.push(`<li class="options__empty">Показаны первые ${OPTIONS_LIMIT} из ${found.length}, уточни поиск</li>`);
   list.innerHTML = rows.join('');
@@ -449,25 +495,27 @@ function update() {
   if (state.sort === 'margin-desc' && !state.showScores) state.sort = 'score-desc';
   if (state.dir && state.uni && !index.programs.some((p) => p.uni === state.uni && p.dirKey === state.dir)) state.dir = '';
   results = computeResults(index, state);
-  shown = PAGE_SIZE;
+  page = 1;
   syncControls();
   updateSubjects(el.subjects, state, results.unlock);
   renderSubjectsHint();
   renderSummary();
-  renderCards(0);
+  renderCards();
   writeState(state, index);
   syncCollections();
 }
 
-function setPill(kind, value) {
+function setPill(kind, value, full = value) {
   const pill = el.fbar.querySelector(`[data-pop="${kind}"]`);
   pill.classList.toggle('is-active', Boolean(value));
   pill.querySelector('.fpill__label').textContent = value || POP_TITLES[kind];
-  pill.title = value ? `${POP_TITLES[kind]}: ${value}` : '';
+  pill.title = value ? `${POP_TITLES[kind]}: ${full}` : '';
 }
 
 function syncControls() {
-  setPill('city', state.city ? index.cities.get(state.city)?.name : '');
+  // «Москва и Московская область» -> «Москва»: на кнопке нужно коротко, полное имя в подсказке
+  const cityName = state.city ? index.cities.get(state.city)?.name ?? '' : '';
+  setPill('city', cityName.split(' и ')[0], cityName);
   setPill('uni', state.uni ? index.unis.get(state.uni)?.name : '');
   setPill('dir', state.dir ? index.programs.find((p) => p.dirKey === state.dir)?.name : '');
   setPill('form', [...state.forms, ...state.levels].join(', '));
@@ -492,9 +540,10 @@ function hasActiveFilters() {
 function renderSubjectsHint() {
   const n = state.subjects.size;
   const left = MIN_SUBJECTS - n;
-  el.subjectsHint.innerHTML = left > 0
-    ? `Выбрано <b>${n}</b>. Добавь ещё ${left} ${pluralize(left, 'предмет', 'предмета', 'предметов')}: нужно минимум ${MIN_SUBJECTS}, считая русский.`
-    : `Выбрано <b>${n}</b> ${pluralize(n, 'предмет', 'предмета', 'предметов')}. Зелёное «+N» — сколько ещё программ откроет предмет.`;
+  const base = state.mathBase ? ' Базовую математику вузы не засчитывают: покажем программы, где она не нужна.' : '';
+  el.subjectsHint.innerHTML = (left > 0
+    ? `Русский и математика уже отмечены. Добавь ещё ${left} ${pluralize(left, 'предмет', 'предмета', 'предметов')}.`
+    : `Выбрано <b>${n}</b> ${pluralize(n, 'предмет', 'предмета', 'предметов')}. Зелёное «+N» — сколько ещё программ откроет предмет.`) + base;
 }
 
 function renderSummary() {
@@ -509,37 +558,66 @@ function renderSummary() {
     : 'Ничего не нашлось';
 }
 
-function renderCards(from) {
+const PROMO_AT = 6; // после какой карточки на первой странице показать ненавязчивую плашку Премиума
+
+function renderCards() {
+  el.pager.hidden = true;
   if (!results.ready) {
     el.cards.innerHTML = '';
-    el.more.hidden = true;
     const left = MIN_SUBJECTS - state.subjects.size;
     el.empty.hidden = false;
     el.empty.innerHTML = `
       <div class="empty__icon" aria-hidden="true">👆</div>
       <p class="empty__title">Отметь ещё ${left} ${pluralize(left, 'предмет', 'предмета', 'предметов')}</p>
-      <p>Русский язык уже учтён, он нужен везде. Зелёные цифры на предметах подскажут, какой выбор откроет больше программ.</p>`;
+      <p>Русский и математика уже учтены, они обязательны. Зелёные цифры на предметах подскажут, какой выбор откроет больше программ.</p>`;
     return;
   }
   if (!results.items.length) {
     el.cards.innerHTML = '';
-    el.more.hidden = true;
     el.empty.hidden = false;
     const filtered = hasActiveFilters();
     el.empty.innerHTML = `
       <div class="empty__icon" aria-hidden="true">🔍</div>
       <p class="empty__title">Подходящих программ нет</p>
-      <p>${filtered ? 'Попробуй ослабить фильтры или поменять набор предметов.' : 'С этим набором предметов ничего не нашлось. Попробуй добавить предмет с зелёной цифрой.'}</p>
+      <p>${filtered ? 'Попробуй ослабить фильтры или поменять набор предметов.'
+        : state.mathBase ? 'С базовой математикой и этими предметами программ не нашлось. Добавь предмет с зелёной цифрой или переключи математику на профиль.'
+          : 'С этим набором предметов ничего не нашлось. Попробуй добавить предмет с зелёной цифрой.'}</p>
       ${filtered ? '<button type="button" class="btn btn--primary" data-action="reset-filters">Сбросить фильтры</button>' : ''}`;
     return;
   }
   el.empty.hidden = true;
-  const html = results.items.slice(from, shown).map((item) => renderCard(item, index, state)).join('');
-  if (from === 0) el.cards.innerHTML = html;
-  else el.cards.insertAdjacentHTML('beforeend', html);
-  const rest = results.items.length - shown;
-  el.more.hidden = rest <= 0;
-  el.more.textContent = `Показать ещё ${Math.min(rest, PAGE_SIZE)} · осталось ${rest.toLocaleString('ru')}`;
+  const pages = Math.ceil(results.items.length / PAGE_SIZE);
+  page = Math.min(Math.max(1, page), pages);
+  const cards = results.items.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((item) => renderCard(item, index, state));
+  if (page === 1 && cards.length > PROMO_AT + 2) cards.splice(PROMO_AT, 0, PROMO_CARD);
+  el.cards.innerHTML = cards.join('');
+  renderPager(pages);
+}
+
+const PROMO_CARD = `
+  <li class="promo-card">
+    <span class="promo-card__icon" aria-hidden="true">🎯</span>
+    <div><b>Не знаешь, куда подать 5 заявлений?</b><span>Премиум соберёт стратегию: вуз мечты, реальные варианты и надёжный запасной.</span></div>
+    <button type="button" class="btn btn--premium btn--sm" data-premium>Подробнее</button>
+  </li>`;
+
+/** Номера страниц: ← 1 … 4 5 6 … 20 → */
+function renderPager(pages) {
+  if (pages <= 1) return;
+  const sorted = [...new Set([1, pages, page - 1, page, page + 1])].filter((n) => n >= 1 && n <= pages).sort((a, b) => a - b);
+  const num = (n) => `<button type="button" class="pager__btn${n === page ? ' is-current' : ''}" data-page="${n}"${n === page ? ' aria-current="page"' : ''}>${n}</button>`;
+  const arrow = (n, label, text, off) => `<button type="button" class="pager__btn" data-page="${n}" aria-label="${text}"${off ? ' disabled' : ''}>${label}</button>`;
+  const parts = [arrow(page - 1, '←', 'Предыдущая страница', page === 1)];
+  sorted.forEach((n, i) => {
+    if (i && n - sorted[i - 1] > 1) parts.push('<span class="pager__gap">…</span>');
+    parts.push(num(n));
+  });
+  parts.push(arrow(page + 1, '→', 'Следующая страница', page === pages));
+  const from = (page - 1) * PAGE_SIZE + 1;
+  const to = Math.min(page * PAGE_SIZE, results.items.length);
+  el.pager.innerHTML = `<div class="pager__btns">${parts.join('')}</div>
+    <span class="pager__info">${from}–${to} из ${results.items.length.toLocaleString('ru')}</span>`;
+  el.pager.hidden = false;
 }
 
 function showFatal(err) {
@@ -594,7 +672,8 @@ function syncCollections() {
     const on = state.favs.has(b.dataset.fav);
     b.classList.toggle('is-on', on);
     b.setAttribute('aria-pressed', String(on));
-    b.textContent = on ? '♥ В избранном' : '♡ В избранное';
+    b.textContent = on ? '♥' : '♡';
+    b.title = on ? 'Убрать из избранного' : 'В избранное';
   });
   document.querySelectorAll('[data-cmp]').forEach((b) => {
     const on = state.cmp.has(b.dataset.cmp);
@@ -605,7 +684,7 @@ function syncCollections() {
 }
 
 function itemFor(p) {
-  const mine = state.showScores ? myTotal(p, state.subjects, state.myScores) : null;
+  const mine = state.showScores ? myTotal(p, effectiveSubjects(state), state.myScores) : null;
   return { p, mine, margin: mine != null && p.score != null ? mine - p.score : null };
 }
 
@@ -639,6 +718,7 @@ function renderCompare() {
   }
   rows.push(
     ['Экзамены', (i) => esc(examText(i.p))],
+    ['Платно в год', (i) => (i.p.cost ? `<b>${i.p.cost.toLocaleString('ru')} ₽</b>` : '<span class="muted">нет данных</span>')],
     ['Форма и уровень', (i) => esc(`${i.p.form}, ${i.p.level || '—'}`)],
     ['Факультет', (i) => esc(i.p.faculty || '—')],
     ['', (i) => `<a class="card__link" href="${esc(officialProgramUrl(i.p, i.p.uniObj))}" target="_blank" rel="noopener noreferrer">Сайт вуза ↗</a>

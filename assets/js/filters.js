@@ -1,7 +1,19 @@
 // Чистая логика подбора: без DOM, чтобы её можно было тестировать отдельно (tests/filters.test.html).
 
 export const MIN_SUBJECTS = 3;
-export const LOCKED_SUBJECT = 'rus';
+// Русский и математика обязательны для аттестата, поэтому отмечены всегда.
+export const LOCKED_SUBJECTS = ['rus', 'math'];
+
+/**
+ * Предметы, которые засчитывают вузы. Базовую математику вузы не принимают:
+ * она считается сданным экзаменом (для минимума из трёх), но не открывает программы с математикой.
+ */
+export function effectiveSubjects(state) {
+  if (!state.mathBase || !state.subjects.has('math')) return state.subjects;
+  const set = new Set(state.subjects);
+  set.delete('math');
+  return set;
+}
 
 const collator = new Intl.Collator('ru', { sensitivity: 'base' });
 
@@ -118,11 +130,11 @@ export function matchesBaseFilters(p, state, bounds) {
  * Пока выбрано меньше MIN_SUBJECTS предметов, список пуст (ready = false).
  */
 export function computeResults(index, state) {
-  const selected = state.subjects;
-  const ready = selected.size >= MIN_SUBJECTS;
+  const selected = effectiveSubjects(state);
+  const ready = state.subjects.size >= MIN_SUBJECTS;
   const unlock = new Map();
   const items = [];
-  const showUnlock = selected.size + 1 >= MIN_SUBJECTS;
+  const showUnlock = state.subjects.size + 1 >= MIN_SUBJECTS;
 
   for (const p of index.programs) {
     if (!matchesBaseFilters(p, state, index.scoreBounds)) continue;
@@ -144,6 +156,7 @@ const SORTERS = {
   'score-asc': (a, b) => nullsLast(a.p.score, b.p.score, (x, y) => x - y),
   'margin-desc': (a, b) => nullsLast(a.margin, b.margin, (x, y) => y - x),
   'trend-desc': (a, b) => nullsLast(a.p.trend, b.p.trend, (x, y) => y - x),
+  'cost-asc': (a, b) => nullsLast(a.p.cost, b.p.cost, (x, y) => x - y),
   name: (a, b) => collator.compare(a.p.name, b.p.name),
   uni: (a, b) => collator.compare(a.p.uniObj?.name ?? '', b.p.uniObj?.name ?? ''),
 };
@@ -153,6 +166,7 @@ export const SORT_OPTIONS = [
   ['score-asc', 'Проходной балл ↑'],
   ['margin-desc', 'Запас моих баллов'],
   ['trend-desc', 'Рост балла за год'],
+  ['cost-asc', 'Платное дешевле'],
   ['name', 'Направление А–Я'],
   ['uni', 'Вуз А–Я'],
 ];

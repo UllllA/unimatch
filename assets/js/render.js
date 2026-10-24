@@ -1,5 +1,5 @@
 // HTML-шаблоны. Все строки из данных проходят через esc(): данные парсятся со стороннего сайта.
-import { pluralize } from './filters.js';
+import { pluralize, effectiveSubjects, LOCKED_SUBJECTS } from './filters.js';
 
 const ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 export const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (ch) => ESC[ch]);
@@ -8,24 +8,30 @@ const LANGS = ['eng', 'ger', 'fra', 'spa', 'chi'];
 
 export function mountSubjects(container, index) {
   container.innerHTML = index.subjectList
-    .map(
-      (s) => `
-    <div class="subject${s.locked ? ' is-locked' : ''}" data-id="${esc(s.id)}">
-      <button type="button" class="subject__toggle" aria-pressed="false" title="${esc(s.name)}"
-        ${s.locked ? 'aria-disabled="true"' : ''}>
+    .map((s) => {
+      const locked = LOCKED_SUBJECTS.includes(s.id);
+      const isMath = s.id === 'math';
+      return `
+    <div class="subject${locked ? ' is-locked' : ''}" data-id="${esc(s.id)}">
+      <button type="button" class="subject__toggle" aria-pressed="false" title="${esc(isMath ? 'Математика' : s.name)}"
+        ${locked ? 'aria-disabled="true"' : ''}>
         <span class="subject__icon" aria-hidden="true">${esc(s.icon)}</span>
         <span class="subject__text">
           <span class="subject__name">${esc(s.short)}</span>
-          ${s.locked ? '<span class="subject__note">обязательный</span>' : ''}
+          ${locked ? '<span class="subject__note">обязательный</span>' : ''}
         </span>
-        ${s.locked ? '' : '<span class="subject__badge"></span>'}
+        ${!locked || isMath ? '<span class="subject__badge"></span>' : ''}
       </button>
+      ${isMath ? `<div class="seg" role="group" aria-label="Уровень математики">
+        <button type="button" class="seg__btn" data-math="profile" aria-pressed="true">Профиль</button>
+        <button type="button" class="seg__btn" data-math="base" aria-pressed="false">База</button>
+      </div>` : ''}
       <label class="subject__score">
         <span class="sr-only">Мой балл ЕГЭ: ${esc(s.name)}</span>
         <input type="number" inputmode="numeric" min="0" max="100" step="1" placeholder="балл" data-score="${esc(s.id)}">
       </label>
-    </div>`,
-    )
+    </div>`;
+    })
     .join('');
 }
 
@@ -33,17 +39,23 @@ export function updateSubjects(container, state, unlock) {
   for (const el of container.querySelectorAll('.subject')) {
     const id = el.dataset.id;
     const on = state.subjects.has(id);
+    const base = id === 'math' && state.mathBase;
     el.classList.toggle('is-selected', on);
-    el.classList.toggle('has-score', on && state.showScores);
+    el.classList.toggle('is-base', base);
+    el.classList.toggle('has-score', on && state.showScores && !base);
     el.querySelector('.subject__toggle').setAttribute('aria-pressed', String(on));
+    el.querySelectorAll('[data-math]').forEach((b) => b.setAttribute('aria-pressed', String((b.dataset.math === 'base') === state.mathBase)));
+    const note = el.querySelector('.subject__note');
+    if (note && id === 'math') note.textContent = base ? 'база · вузы не учитывают' : 'профильная';
     const badge = el.querySelector('.subject__badge');
     if (badge) {
-      const n = on ? 0 : unlock.get(id) ?? 0;
+      // У математики «+N» показывает, сколько программ откроет профильный уровень вместо базы.
+      const n = base ? unlock.get(id) ?? 0 : on ? 0 : unlock.get(id) ?? 0;
       badge.textContent = n ? `+${n}` : '';
-      badge.title = n ? `Добавит ${n} ${pluralize(n, 'программу', 'программы', 'программ')}` : '';
+      badge.title = n ? `${base ? 'С профильной откроет' : 'Добавит'} ${n} ${pluralize(n, 'программу', 'программы', 'программ')}` : '';
     }
     const input = el.querySelector('input');
-    input.tabIndex = on && state.showScores ? 0 : -1;
+    input.tabIndex = on && state.showScores && !base ? 0 : -1;
     if (document.activeElement !== input) input.value = state.myScores[id] ?? '';
   }
 }
@@ -147,12 +159,17 @@ export function officialProgramUrl(p, uni) {
   return `https://yandex.ru/search/?text=${encodeURIComponent(query)}`;
 }
 
+const rub = (n) => `${Math.round(n).toLocaleString('ru')} ₽`;
+
 export function renderCard(item, index, state) {
   const { p } = item;
   const uni = p.uniObj ?? { id: 0, name: '—', fullName: '' };
   const site = safeUrl(uni.site);
   const tabUrl = p.pid ? `https://tabiturient.ru/program/n/?${encodeURIComponent(p.pid)}` : safeUrl(uni.url);
-  const mainUrl = officialProgramUrl(p, uni);
+  const searchUrl = officialProgramUrl(p, uni);
+  const key = progKey(p);
+  const fav = Boolean(state.favs?.has(key));
+  const cmp = Boolean(state.cmp?.has(key));
   const tags = [
     p.code && `<span class="tag tag--code">${esc(p.code)}</span>`,
     p.level && `<span class="tag">${esc(p.level)}</span>`,
@@ -171,23 +188,27 @@ export function renderCard(item, index, state) {
       </div>
       ${renderScore(p, item, state)}
     </div>
-    <h3 class="card__title">
-      <a class="card__main-link" href="${esc(mainUrl)}" target="_blank" rel="noopener noreferrer"
-        title="Найти страницу программы на ${site ? 'официальном сайте вуза' : 'сайте вуза'}">${esc(p.name)}</a>
-    </h3>
-    ${p.profile ? `<p class="card__profile">${esc(p.profile)}</p>` : ''}
+    <h3 class="card__title">${esc(p.name)}</h3>
+    ${p.profile ? `<p class="card__profile" title="${esc(p.profile)}">${esc(p.profile)}</p>` : ''}
     <div class="card__tags">${tags}</div>
-    ${renderExams(p, index, state.subjects)}
+    ${renderExams(p, index, effectiveSubjects(state))}
+    <div class="card__money">
+      ${p.cost ? `<span class="cost" title="Стоимость платного обучения за год">💰 Платно: <b>${rub(p.cost)}</b> в год</span>`
+        : '<span class="cost cost--none">💰 Цена платного: нет данных</span>'}
+    </div>
     ${p.faculty || state.showScores ? `<div class="card__foot">
       ${p.faculty ? `<span class="card__faculty">${esc(p.faculty)}</span>` : ''}
       ${renderMine(item, state)}
     </div>` : ''}
     <div class="card__links">
-      <span class="card__go">Открыть на сайте вуза ↗</span>
-      <button type="button" class="card__act${state.favs?.has(progKey(p)) ? ' is-on' : ''}" data-fav="${esc(progKey(p))}" aria-pressed="${Boolean(state.favs?.has(progKey(p)))}">${state.favs?.has(progKey(p)) ? '♥ В избранном' : '♡ В избранное'}</button>
-      <button type="button" class="card__act${state.cmp?.has(progKey(p)) ? ' is-on' : ''}" data-cmp="${esc(progKey(p))}" aria-pressed="${Boolean(state.cmp?.has(progKey(p)))}">${state.cmp?.has(progKey(p)) ? '⚖ В сравнении' : '⚖ Сравнить'}</button>
-      ${site ? `<a class="card__link" href="${esc(site)}" target="_blank" rel="noopener noreferrer">🌐 Сайт вуза</a>` : ''}
-      ${tabUrl ? `<a class="card__link" href="${esc(tabUrl)}" target="_blank" rel="noopener noreferrer">📊 На Табитуриенте</a>` : ''}
+      ${site ? `<a class="card__link card__link--main" href="${esc(site)}" target="_blank" rel="noopener noreferrer">🌐 Сайт вуза ↗</a>` : ''}
+      <a class="card__link card__link--search" href="${esc(searchUrl)}" target="_blank" rel="noopener noreferrer"
+        title="Найти страницу этой программы на ${site ? 'официальном сайте вуза' : 'сайте вуза'} через Яндекс">🔍 Найти программу</a>
+      ${tabUrl ? `<a class="card__link" href="${esc(tabUrl)}" target="_blank" rel="noopener noreferrer" title="Страница программы на Табитуриенте">📊</a>` : ''}
+      <span class="card__acts">
+        <button type="button" class="card__act${fav ? ' is-on' : ''}" data-fav="${esc(key)}" aria-pressed="${fav}" title="${fav ? 'Убрать из избранного' : 'В избранное'}" aria-label="Избранное">${fav ? '♥' : '♡'}</button>
+        <button type="button" class="card__act${cmp ? ' is-on' : ''}" data-cmp="${esc(key)}" aria-pressed="${cmp}" title="Сравнение">${cmp ? '⚖ В сравнении' : '⚖ Сравнить'}</button>
+      </span>
     </div>
   </li>`;
 }
