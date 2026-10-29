@@ -561,7 +561,12 @@ function renderPopBody() {
     });
     list.addEventListener('click', (e) => {
       const opt = e.target.closest('.option');
-      if (opt) chooseOption(opt.dataset.value);
+      if (!opt) return;
+      if (opt.dataset.area == null) { chooseOption(opt.dataset.value); return; }
+      // область от ИИ-помощника: щелчок убирает её, окно остаётся открытым
+      state.areas.delete(opt.dataset.area);
+      update();
+      fillOptions(list, input.value);
     });
   } else if (kind === 'sort') {
     // На телефоне вместо обрезанного списка — окно с полными названиями сортировки
@@ -663,6 +668,7 @@ function optionsFor(kind, query) {
   const dirs = new Map();
   for (const p of index.programs) {
     if ((state.city && p.cityId !== state.city) || (state.uni && p.uni !== state.uni)) continue;
+    if (state.areas.size && !query && !state.areas.has(p.area)) continue; // поиск идёт по всем направлениям
     const d = dirs.get(p.dirKey);
     if (d) d.count += 1;
     else dirs.set(p.dirKey, { value: p.dirKey, label: p.name, code: p.code, sub: [p.code, AREAS[p.area]].filter(Boolean).join(' · '), count: 1 });
@@ -690,8 +696,20 @@ function fillOptions(list, query) {
       <span class="option__main">${star}${esc(o.label)}${o.sub ? `<small>${esc(o.sub)}</small>` : ''}</span>${count}</button></li>`;
   };
   if (!words.length) {
-    rows.push(`<li><button type="button" class="option${current === '' ? ' is-selected' : ''}" data-value="" role="option" aria-selected="${current === ''}">
-      <span class="option__main">${anyLabel}</span><span class="option__count">${all.length}</span></button></li>`);
+    const anySel = current === '' && !(kind === 'dir' && state.areas.size);
+    rows.push(`<li><button type="button" class="option${anySel ? ' is-selected' : ''}" data-value="" role="option" aria-selected="${anySel}">
+      <span class="option__main">${anyLabel}</span>${kind === 'dir' && state.areas.size ? '' : `<span class="option__count">${all.length}</span>`}</button></li>`);
+    if (kind === 'dir' && state.areas.size) {
+      // Области, которые выставил ИИ-помощник: видно, что фильтр включён, и каждую можно убрать.
+      const areaCount = new Map();
+      for (const p of index.programs) {
+        if ((state.city && p.cityId !== state.city) || (state.uni && p.uni !== state.uni) || !state.areas.has(p.area)) continue;
+        areaCount.set(p.area, (areaCount.get(p.area) ?? 0) + 1);
+      }
+      rows.push('<li class="options__head">Выбрал ИИ-помощник</li>', ...[...state.areas].map((a) => `<li><button type="button" class="option is-selected" data-area="${esc(a)}" role="option" aria-selected="true">
+        <span class="option__main">✓ ${esc(AREAS[a] ?? a)}<small>Нажми, чтобы убрать</small></span><span class="option__count">${areaCount.get(a) ?? 0}</span></button></li>`),
+      '<li class="options__head">Направления в этих областях</li>');
+    }
     if (kind === 'city') {
       const top = POPULAR_CITIES.map((name) => all.find((c) => c.label.startsWith(name))).filter(Boolean);
       if (top.length) {
