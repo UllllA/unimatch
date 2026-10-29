@@ -1,26 +1,34 @@
 import {
-  buildIndex, computeResults, hasScoreFilter, normalizeText, pluralize, effectiveSubjects, MIN_SUBJECTS, LOCKED_SUBJECTS, SORT_OPTIONS, SORT_SHORT,
+  buildIndex, computeResults, groupByUni, hasMyScores, hasScoreFilter, normalizeText, pluralize, effectiveSubjects, myTotal, marginFor,
+  MIN_SUBJECTS, LOCKED_SUBJECTS, LANGS, SORT_OPTIONS, SORT_SHORT,
 } from './filters.js';
 import { defaultState, readState, writeState } from './state.js';
-import { AREAS, FORMS } from './catalog.js';
-import { esc, mountSubjects, updateSubjects, renderCard, progKey, officialProgramUrl } from './render.js';
-import { myTotal } from './filters.js';
+import { AREAS, FORMS, REGION_ALIASES } from './catalog.js';
+import {
+  esc, icon, mountSubjects, updateSubjects, langId, renderCard, renderUniRow, progKey, officialProgramUrl,
+} from './render.js';
+import { askAssistant, applyPlan, areasLabel } from './assistant.js';
 
 const PAGE_SIZE = 24;
 const OPTIONS_LIMIT = 200;
+const HINT_AT = 6; // после какой карточки показать подсказку про ИИ-помощника (только когда введены баллы)
+const MAX_COMPARE = 4;
+const STORE = {
+  fav: 'unimatch:fav', cmp: 'unimatch:cmp', last: 'unimatch:last', theme: 'unimatch:theme', hintOff: 'unimatch:hint-off',
+};
 const $ = (id) => document.getElementById(id);
 const el = {
-  heroStats: $('heroStats'), demoBanner: $('demoBanner'),
-  subjects: $('subjectsGrid'), subjectsHint: $('subjectsHint'), scoresToggle: $('scoresToggle'),
-  resetSubjects: $('resetSubjects'),
+  heroStats: $('heroStats'), demoBanner: $('demoBanner'), stepper: $('stepper'),
+  subjects: $('subjectsGrid'), subjectsHint: $('subjectsHint'), resetSubjects: $('resetSubjects'),
   fbar: $('filterBar'), budget: $('budgetToggle'), fits: $('fitsToggle'), resetFilters: $('resetFilters'),
-  q: $('q'), sort: $('sort'), summary: $('resultsSummary'),
-  results: $('results'), cards: $('cards'), pager: $('pager'), empty: $('emptyState'), theme: $('themeToggle'),
+  q: $('q'), sort: $('sort'), summary: $('resultsSummary'), views: $('viewSwitch'), share: $('shareBtn'),
+  results: $('results'), list: $('cards'), pager: $('pager'), empty: $('emptyState'), theme: $('themeToggle'),
   pop: $('popover'), popTitle: $('popTitle'), popBody: $('popBody'), popClose: $('popClose'), popBackdrop: $('popBackdrop'),
   sheet: $('filterSheet'), sheetBackdrop: $('fsheetBackdrop'), mFilters: $('mFilters'), mCount: $('mFiltersCount'),
   mChips: $('mChips'), mBudget: $('mBudget'), mFits: $('mFits'), mShow: $('mShow'),
   dataInfo: $('dataInfo'), premiumBtn: $('premiumBtn'), premium: $('premiumDialog'),
   premiumBuy: $('premiumBuy'), premiumThanks: $('premiumThanks'),
+  ask: $('askForm'), askInput: $('askInput'), askReply: $('askReply'),
 };
 
 let index;
@@ -31,6 +39,7 @@ let openPop = null; // { kind, btn }
 const lists = {};
 
 async function init() {
+  mountIcons();
   try {
     // В однофайловой сборке (tools/build_single.py) данные встроены в страницу.
     const embedded = document.getElementById('unimatch-data');
@@ -47,13 +56,19 @@ async function init() {
     showFatal(err);
     return;
   }
-  state = readState(index);
   index.byKey = new Map(index.programs.map((p) => [progKey(p), p]));
-  state.favs = loadSet('unimatch:fav');
-  state.cmp = loadSet('unimatch:cmp');
+  // Ссылка с подборкой важнее: прошлый выбор подставляем, только если адрес пустой.
+  state = readState(index, location.search || load(STORE.last) || '');
+  state.favs = loadSet(STORE.fav);
+  state.cmp = loadSet(STORE.cmp);
   setupStatic();
   bindEvents();
   update();
+}
+
+/** <i data-icon="search"></i> в разметке -> svg из общего набора иконок. */
+function mountIcons(root = document) {
+  root.querySelectorAll('i[data-icon]').forEach((i) => { i.outerHTML = icon(i.dataset.icon); });
 }
 
 // ------------------------------------------------------------------ первичная отрисовка
@@ -61,12 +76,13 @@ async function init() {
 function setupStatic() {
   const { counts, isDemo, generatedAt, source, years } = index.meta;
   el.heroStats.innerHTML = [
-    ['🏛️', counts.universities, 'вуз', 'вуза', 'вузов'],
-    ['📚', counts.programs, 'программа', 'программы', 'программ'],
-    ['📍', counts.cities, 'регион', 'региона', 'регионов'],
+    [counts.universities, 'вуз', 'вуза', 'вузов'],
+    [counts.programs, 'программа', 'программы', 'программ'],
+    [counts.cities, 'регион', 'региона', 'регионов'],
   ]
-    .map(([icon, n, ...forms]) => `<span><i aria-hidden="true">${icon}</i><b>${n.toLocaleString('ru')}</b> ${pluralize(n, ...forms)}</span>`)
-    .join('');
+    .map(([n, ...forms]) => `<b>${n.toLocaleString('ru')}</b> ${pluralize(n, ...forms)}`)
+    .concat(years.length ? [`баллы ${years.join(', ')} года`] : [])
+    .join(' · ');
   el.demoBanner.hidden = !isDemo;
 
   const date = generatedAt ? new Date(generatedAt).toLocaleDateString('ru', { day: 'numeric', month: 'long', year: 'numeric' }) : '—';
@@ -93,63 +109,38 @@ function setupStatic() {
   for (const p of index.programs) progCount.set(p.uni, (progCount.get(p.uni) ?? 0) + 1);
   lists.cities = [...index.cities.values()]
     .sort((a, b) => a.name.localeCompare(b.name, 'ru'))
-    .map((c) => ({ value: c.id, label: c.name, sub: `${uniCount.get(c.id) ?? 0} ${pluralize(uniCount.get(c.id) ?? 0, 'вуз', 'вуза', 'вузов')}` }));
+    .map((c) => ({
+      value: c.id, label: c.name, sub: `${uniCount.get(c.id) ?? 0} ${pluralize(uniCount.get(c.id) ?? 0, 'вуз', 'вуза', 'вузов')}`,
+      hay: normalizeText(`${c.name} ${REGION_ALIASES[c.name] ?? ''}`),
+    }));
   lists.unis = [...index.unis.values()]
     .sort((a, b) => a.name.localeCompare(b.name, 'ru'))
     .map((u) => ({
       value: u.id, city: u.city, label: u.name,
       sub: [u.fullName !== u.name ? u.fullName : '', u.cityName].filter(Boolean).join(' · '),
       count: progCount.get(u.id) ?? 0,
+      hay: normalizeText(`${u.name} ${u.fullName} ${u.cityName} ${REGION_ALIASES[u.cityName] ?? ''}`),
     }));
 }
 
 // ------------------------------------------------------------------ события
 
 function bindEvents() {
-  el.subjects.addEventListener('click', (e) => {
-    const level = e.target.closest('[data-math]');
-    if (level) {
-      state.mathBase = level.dataset.math === 'base';
-      update();
-      return;
+  bindSubjects();
+  bindAssistant();
+
+  el.stepper.addEventListener('click', (e) => {
+    const step = e.target.closest('[data-goto]');
+    if (!step) return;
+    if (step.dataset.goto === 'subjects') el.subjects.closest('.panel').scrollIntoView({ block: 'start' });
+    if (step.dataset.goto === 'results') el.results.scrollIntoView({ block: 'start' });
+    if (step.dataset.goto === 'scores') {
+      // Первое пустое поле балла у отмеченного предмета, иначе первое поле вообще.
+      const inputs = [...el.subjects.querySelectorAll('.is-selected .subject__score:not([hidden])')];
+      const target = inputs.find((i) => !i.value) ?? inputs[0];
+      target?.scrollIntoView({ block: 'center' });
+      target?.focus({ preventScroll: true });
     }
-    const btn = e.target.closest('.subject__toggle');
-    if (!btn) return;
-    const id = btn.closest('.subject').dataset.id;
-    if (LOCKED_SUBJECTS.includes(id)) return;
-    state.subjects.has(id) ? state.subjects.delete(id) : state.subjects.add(id);
-    update();
-  });
-  // Балл ЕГЭ — от 0 до 100: сразу правим поле, чтобы нельзя было ввести 150 или -5.
-  el.subjects.addEventListener('input', (e) => {
-    const input = e.target;
-    if (!input.dataset.score || input.value === '') return;
-    const digits = input.value.replace(/\D/g, '').slice(0, 3);
-    const fixed = digits === '' ? '' : String(Math.min(100, Number(digits)));
-    if (fixed !== input.value) input.value = fixed;
-  });
-  el.subjects.addEventListener('keydown', (e) => {
-    if (e.target.dataset.score && ['-', '+', 'e', 'E', ',', '.'].includes(e.key)) e.preventDefault();
-  });
-  el.subjects.addEventListener('input', debounce((e) => {
-    const id = e.target.dataset.score;
-    if (!id) return;
-    const value = e.target.value === '' ? null : Math.round(Number(e.target.value));
-    if (value == null || Number.isNaN(value)) delete state.myScores[id];
-    else state.myScores[id] = Math.min(100, Math.max(0, value));
-    update();
-  }, 200));
-  el.scoresToggle.addEventListener('change', () => {
-    state.showScores = el.scoresToggle.checked;
-    if (!state.showScores) state.fits = false;
-    update();
-    if (state.showScores) el.subjects.querySelector('.is-selected input')?.focus();
-  });
-  el.resetSubjects.addEventListener('click', () => {
-    state.subjects = new Set(LOCKED_SUBJECTS);
-    state.mathBase = false;
-    state.myScores = {};
-    update();
   });
 
   el.fbar.addEventListener('click', (e) => {
@@ -158,6 +149,16 @@ function bindEvents() {
   });
   el.budget.addEventListener('click', () => { state.budgetOnly = !state.budgetOnly; update(); });
   el.fits.addEventListener('click', () => { state.fits = !state.fits; update(); });
+  el.resetFilters.addEventListener('click', resetFilters);
+  el.q.addEventListener('input', debounce(() => { state.q = el.q.value.trim(); update(); }, 180));
+  el.sort.addEventListener('change', () => { state.sort = el.sort.value; update(); });
+  el.views.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-view]');
+    if (!btn || btn.dataset.view === state.view) return;
+    state.view = btn.dataset.view;
+    update();
+  });
+  el.share.addEventListener('click', shareSelection);
 
   // Телефон: все фильтры в шторке снизу, включённые — плашками под поиском
   el.mFilters.addEventListener('click', openSheet);
@@ -182,21 +183,44 @@ function bindEvents() {
     else if (kind === 'score') { state.min = null; state.max = null; }
     else if (kind === 'budget') state.budgetOnly = false;
     else if (kind === 'fits') state.fits = false;
-    else state[kind] = kind === 'dir' ? '' : null;
+    else if (kind === 'dir') { state.dir = ''; state.areas.clear(); }
+    else state[kind] = null;
     update();
   });
-  el.resetFilters.addEventListener('click', resetFilters);
-  el.q.addEventListener('input', debounce(() => { state.q = el.q.value.trim(); update(); }, 180));
-  el.sort.addEventListener('change', () => { state.sort = el.sort.value; update(); });
+
   el.pager.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-page]');
     if (!btn || btn.disabled) return;
     page = Number(btn.dataset.page);
-    renderCards();
+    renderList();
     el.results.scrollIntoView({ block: 'start' });
+    // Кнопка страницы перерисовалась, фокус улетел бы в начало документа: ставим его на результаты.
+    el.results.focus({ preventScroll: true });
   });
-  el.cards.addEventListener('click', (e) => {
+  el.list.addEventListener('click', (e) => {
+    const uniRow = e.target.closest('[data-uni]');
+    if (uniRow) {
+      // Из режима «Вузы» — сразу к программам этого вуза.
+      state.uni = Number(uniRow.dataset.uni);
+      state.city = index.unis.get(state.uni)?.city ?? state.city;
+      state.view = 'programs';
+      update();
+      el.results.scrollIntoView({ block: 'start' });
+      return;
+    }
     if (e.target.closest('[data-premium]')) openPremium();
+    if (e.target.closest('[data-ask]')) focusAssistant();
+    if (e.target.closest('[data-dismiss-hint]')) {
+      save(STORE.hintOff, '1');
+      renderList();
+    }
+  });
+  // Плашка над списком: «Ты проходишь на N — показать только их?» и обратно.
+  $('fitsBar').addEventListener('click', (e) => {
+    if (!e.target.closest('[data-fits]')) return;
+    state.fits = !state.fits;
+    update();
+    el.results.scrollIntoView({ block: 'start' });
   });
   el.empty.addEventListener('click', (e) => {
     if (e.target.closest('[data-action="reset-filters"]')) resetFilters();
@@ -221,30 +245,37 @@ function bindEvents() {
   const onCardAction = (e) => {
     const fav = e.target.closest('[data-fav]');
     const cmp = e.target.closest('[data-cmp]');
-    if (fav) toggleIn(state.favs, fav.dataset.fav, 'unimatch:fav');
+    if (fav) toggleIn(state.favs, fav.dataset.fav, STORE.fav);
     if (cmp) {
       const key = cmp.dataset.cmp;
       if (!state.cmp.has(key) && state.cmp.size >= MAX_COMPARE) {
         showToast(`Сравнивать можно до ${MAX_COMPARE} программ, убери одну`);
         return;
       }
-      toggleIn(state.cmp, key, 'unimatch:cmp');
+      toggleIn(state.cmp, key, STORE.cmp);
     }
     if (fav || cmp) {
       syncCollections();
       if (fav && $('favDialog').open) renderFavorites();
     }
   };
-  el.cards.addEventListener('click', onCardAction);
-  $('favList').addEventListener('click', onCardAction);
+  el.list.addEventListener('click', onCardAction);
+  $('favList').addEventListener('click', (e) => {
+    if (e.target.closest('[data-premium]')) {
+      $('favDialog').close();
+      openPremium();
+      return;
+    }
+    onCardAction(e);
+  });
   $('favBtn').addEventListener('click', () => { renderFavorites(); $('favDialog').showModal(); });
   $('cmpOpen').addEventListener('click', () => { renderCompare(); $('cmpDialog').showModal(); });
-  $('cmpClear').addEventListener('click', () => { state.cmp.clear(); saveSet('unimatch:cmp', state.cmp); syncCollections(); });
+  $('cmpClear').addEventListener('click', () => { state.cmp.clear(); saveSet(STORE.cmp, state.cmp); syncCollections(); });
   $('cmpTable').addEventListener('click', (e) => {
     const rm = e.target.closest('[data-rm]');
     if (!rm) return;
     state.cmp.delete(rm.dataset.rm);
-    saveSet('unimatch:cmp', state.cmp);
+    saveSet(STORE.cmp, state.cmp);
     syncCollections();
     if (state.cmp.size) renderCompare();
     else $('cmpDialog').close();
@@ -254,13 +285,144 @@ function bindEvents() {
   }
 
   el.premiumBtn.addEventListener('click', openPremium);
-  document.querySelectorAll('.plans [data-premium]').forEach((b) => b.addEventListener('click', openPremium));
-  el.theme.addEventListener('click', () => setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'));
-  syncTheme();
   el.premium.addEventListener('click', (e) => {
     if (e.target === el.premium || e.target.closest('[data-close]')) el.premium.close();
   });
   el.premiumBuy.addEventListener('click', () => { el.premiumThanks.hidden = false; });
+  el.theme.addEventListener('click', () => setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'));
+  syncTheme();
+}
+
+function bindSubjects() {
+  el.subjects.addEventListener('click', (e) => {
+    const level = e.target.closest('[data-math]');
+    if (level) {
+      state.mathBase = level.dataset.math === 'base';
+      update();
+      return;
+    }
+    const btn = e.target.closest('.subject__toggle');
+    if (!btn) return;
+    const tile = btn.closest('.subject').dataset.id;
+    if (LOCKED_SUBJECTS.includes(tile)) return;
+    const id = tile === 'lang' ? langId(el.subjects, state) : tile;
+    if (state.subjects.has(id)) state.subjects.delete(id);
+    else selectSubject(id);
+    update();
+  });
+  // Другой язык в плашке «Иностранный»: если язык уже отмечен, меняем его вместе с баллом.
+  el.subjects.addEventListener('change', (e) => {
+    if (!e.target.matches('[data-lang]')) return;
+    const next = e.target.value;
+    const prev = LANGS.find((l) => state.subjects.has(l));
+    if (prev && prev !== next) {
+      state.subjects.delete(prev);
+      state.subjects.add(next);
+      if (state.myScores[prev] != null) state.myScores[next] = state.myScores[prev];
+      delete state.myScores[prev];
+    }
+    update();
+  });
+  // Балл ЕГЭ — от 0 до 100: сразу правим поле, чтобы нельзя было ввести 150 или буквы.
+  // Балл записываем в состояние сразу, а откладываем только перерисовку: иначе при быстром
+  // вводе в несколько полей подряд (или автозаполнении) терялись все баллы, кроме последнего.
+  const debouncedScoresUpdate = debounce(update, 250);
+  el.subjects.addEventListener('input', (e) => {
+    const input = e.target;
+    const id = input.dataset.score;
+    if (!id) return;
+    if (input.value !== '') {
+      const digits = input.value.replace(/\D/g, '').slice(0, 3);
+      const fixed = digits === '' ? '' : String(Math.min(100, Number(digits)));
+      if (fixed !== input.value) input.value = fixed;
+    }
+    if (input.value === '') {
+      delete state.myScores[id];
+    } else {
+      state.myScores[id] = Math.min(100, Math.max(0, Number(input.value)));
+      // Вписал балл — значит, сдаёшь: предмет отмечается сам.
+      if (!state.subjects.has(id)) selectSubject(id);
+    }
+    debouncedScoresUpdate();
+  });
+  el.resetSubjects.addEventListener('click', () => {
+    state.subjects = new Set(LOCKED_SUBJECTS);
+    state.mathBase = false;
+    state.myScores = {};
+    update();
+  });
+}
+
+// ------------------------------------------------------------------ ИИ-помощник
+
+/** Строка «Опиши словами»: фраза -> предметы, баллы и фильтры. Последнее применение можно отменить. */
+function bindAssistant() {
+  let undo = null;
+  const regionNames = () => [...index.cities.values()].map((c) => c.name);
+  const run = async (text) => {
+    const button = el.ask.querySelector('[type="submit"]');
+    button.disabled = true;
+    el.ask.classList.add('is-busy');
+    el.askReply.hidden = false;
+    el.askReply.textContent = 'Думаю…';
+    const { plan, source, error } = await askAssistant(text, regionNames());
+    button.disabled = false;
+    el.ask.classList.remove('is-busy');
+    const before = snapshotState();
+    const notes = applyPlan(plan, state, index);
+    if (!notes.length) {
+      Object.assign(state, before);
+      el.askReply.innerHTML = `${plan.reply ? `${esc(plan.reply)} ` : ''}Не получилось понять запрос. Назови предметы, баллы, город или профессию, например: «биология и химия, хочу врачом в Казани».`;
+      return;
+    }
+    undo = before;
+    update();
+    const fallback = error ? `<small class="ask__note">ИИ сейчас недоступен (${esc(error)}), разобрал запрос попроще.</small>` : '';
+    const empty = !results.ready ? '<small class="ask__note">Чтобы появился список, отметь ещё хотя бы один предмет по выбору.</small>'
+      : !results.items.length ? '<small class="ask__note">Ничего не нашлось. Возможно, не хватает предмета (смотри «+N» у предметов) или фильтры слишком узкие.</small>' : '';
+    el.askReply.innerHTML = `
+      <p>${plan.reply && source === 'ai' ? `${esc(plan.reply)}<br>` : ''}<b>Понял так:</b> ${esc(notes.join('; '))}.</p>
+      ${fallback}${empty}
+      <div class="ask__actions">
+        <button type="button" class="btn btn--primary btn--sm" data-ask-show>Смотреть программы</button>
+        <button type="button" class="btn btn--ghost btn--sm" data-ask-undo>Отменить</button>
+      </div>`;
+  };
+  el.ask.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const text = el.askInput.value.trim();
+    if (text) run(text);
+  });
+  el.ask.addEventListener('click', (e) => {
+    const example = e.target.closest('[data-example]');
+    if (example) {
+      el.askInput.value = example.dataset.example;
+      run(example.dataset.example);
+    }
+    if (e.target.closest('[data-ask-show]')) el.results.scrollIntoView({ block: 'start' });
+    if (e.target.closest('[data-ask-undo]') && undo) {
+      Object.assign(state, undo);
+      undo = null;
+      update();
+      el.askReply.hidden = true;
+    }
+  });
+}
+
+/** Копия подбора без избранного и сравнения: чтобы отменить то, что выставил помощник. */
+function snapshotState() {
+  return Object.fromEntries(Object.keys(defaultState()).map((k) => [k, structuredClone(state[k])]));
+}
+
+function focusAssistant() {
+  el.ask.scrollIntoView({ block: 'center' });
+  el.askInput.focus({ preventScroll: true });
+}
+
+/** Отметить предмет; иностранный язык может быть только один. */
+function selectSubject(id) {
+  if (LANGS.includes(id)) for (const l of LANGS) state.subjects.delete(l);
+  state.subjects.add(id);
 }
 
 function openSheet() {
@@ -288,24 +450,35 @@ function openPremium() {
 function setTheme(theme) {
   if (theme === 'dark') document.documentElement.dataset.theme = 'dark';
   else delete document.documentElement.dataset.theme;
-  try {
-    localStorage.setItem('unimatch:theme', theme);
-  } catch {
-    // без localStorage тема просто не запомнится
-  }
+  save(STORE.theme, theme);
   syncTheme();
 }
 
 function syncTheme() {
   const dark = document.documentElement.dataset.theme === 'dark';
   el.theme.setAttribute('aria-checked', String(dark));
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#121020' : '#6c4cf1');
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#12162a' : '#fbfaf5');
+}
+
+/** Ссылка на текущую подборку: на телефоне — системное «Поделиться», на компьютере — в буфер обмена. */
+async function shareSelection() {
+  const url = location.href;
+  try {
+    if (navigator.share && matchMedia('(pointer: coarse)').matches) {
+      await navigator.share({ title: document.title, url });
+      return;
+    }
+    await navigator.clipboard.writeText(url);
+    showToast('Ссылка на подборку скопирована');
+  } catch (err) {
+    if (err?.name !== 'AbortError') showToast('Не получилось скопировать. Возьми адрес из строки браузера');
+  }
 }
 
 function resetFilters() {
   const fresh = defaultState();
   Object.assign(state, {
-    city: fresh.city, uni: fresh.uni, dir: fresh.dir, forms: fresh.forms, levels: fresh.levels,
+    city: fresh.city, uni: fresh.uni, dir: fresh.dir, areas: fresh.areas, forms: fresh.forms, levels: fresh.levels,
     min: fresh.min, max: fresh.max, budgetOnly: fresh.budgetOnly, fits: fresh.fits, q: fresh.q,
   });
   closePop(false);
@@ -369,7 +542,7 @@ function renderPopBody() {
   if (kind === 'city' || kind === 'uni' || kind === 'dir') {
     const placeholder = { city: 'Найти регион…', uni: 'Найти вуз: МИРЭА, МГУ, ВШЭ…', dir: 'Найти направление или код…' }[kind];
     el.popBody.innerHTML = `
-      <div class="pop-search"><span aria-hidden="true">🔍</span><input type="search" placeholder="${placeholder}" aria-label="${placeholder}" autocomplete="off"></div>
+      <div class="pop-search">${icon('search')}<input type="search" placeholder="${placeholder}" aria-label="${placeholder}" autocomplete="off"></div>
       <ul class="options" role="listbox" aria-label="${POP_TITLES[kind]}"></ul>`;
     const input = el.popBody.querySelector('input');
     const list = el.popBody.querySelector('.options');
@@ -394,7 +567,7 @@ function renderPopBody() {
     el.popBody.innerHTML = `<ul class="options" role="listbox" aria-label="Сортировка">${[...el.sort.options].map((o) => `
       <li><button type="button" class="option${o.value === state.sort ? ' is-selected' : ''}" data-sort="${esc(o.value)}" role="option"
         aria-selected="${o.value === state.sort}"${o.disabled ? ' disabled' : ''}><span class="option__main">${esc(o.textContent)}
-        ${o.disabled ? '<small>Сначала включи «Ввести мои баллы»</small>' : ''}</span></button></li>`).join('')}</ul>`;
+        ${o.disabled ? '<small>Сначала впиши свои баллы</small>' : ''}</span></button></li>`).join('')}</ul>`;
     el.popBody.querySelectorAll('[data-sort]').forEach((b) => b.addEventListener('click', () => {
       state.sort = b.dataset.sort;
       closePop(true);
@@ -527,7 +700,8 @@ function fillOptions(list, query) {
     }
   }
   for (const o of found.slice(0, OPTIONS_LIMIT)) rows.push(option(o));
-  if (!found.length) rows.push('<li class="options__empty">Ничего не нашлось. Попробуй по-другому, например «мирэа» или «казань».</li>');
+  const example = { city: '«казань» или «татарстан»', uni: '«мирэа» или «казань»', dir: '«экономика» или «09.03»' }[kind];
+  if (!found.length) rows.push(`<li class="options__empty">Ничего не нашлось. Попробуй по-другому, например ${example}.</li>`);
   if (found.length > OPTIONS_LIMIT) rows.push(`<li class="options__empty">Показаны первые ${OPTIONS_LIMIT} из ${found.length}, уточни поиск</li>`);
   list.innerHTML = rows.join('');
 }
@@ -542,6 +716,7 @@ function chooseOption(value) {
     if (state.uni) state.city = index.unis.get(state.uni)?.city ?? state.city;
   } else {
     state.dir = value;
+    state.areas.clear();
   }
   closePop(true);
   update();
@@ -550,16 +725,21 @@ function chooseOption(value) {
 // ------------------------------------------------------------------ обновление
 
 function update() {
+  state.showScores = hasMyScores(state);
+  if (!state.showScores) state.fits = false;
   if (state.sort === 'margin-desc' && !state.showScores) state.sort = 'score-desc';
   if (state.dir && state.uni && !index.programs.some((p) => p.uni === state.uni && p.dirKey === state.dir)) state.dir = '';
   results = computeResults(index, state);
+  results.groups = state.view === 'unis' ? groupByUni(results.items, state.sort) : null;
   page = 1;
   syncControls();
   updateSubjects(el.subjects, state, results.unlock);
   renderSubjectsHint();
   renderSummary();
-  renderCards();
+  renderFitsBar();
+  renderList();
   writeState(state, index);
+  save(STORE.last, location.search);
   syncCollections();
 }
 
@@ -580,56 +760,77 @@ function syncControls() {
   const cityName = state.city ? index.cities.get(state.city)?.name ?? '' : '';
   setPill('city', cityName.split(' и ')[0], cityName);
   setPill('uni', state.uni ? index.unis.get(state.uni)?.name : '');
-  setPill('dir', state.dir ? index.programs.find((p) => p.dirKey === state.dir)?.name : '');
+  setPill('dir', state.dir ? index.programs.find((p) => p.dirKey === state.dir)?.name : areasLabel(state.areas));
   setPill('form', [...state.forms, ...state.levels].join(', '));
   setPill('score', hasScoreFilter(state, index.scoreBounds)
     ? `${state.min ?? index.scoreBounds.min}–${state.max ?? index.scoreBounds.max}` : '');
-  el.budget.setAttribute('aria-pressed', String(state.budgetOnly));
+  for (const [btn, on] of [[el.budget, state.budgetOnly], [el.mBudget, state.budgetOnly], [el.fits, state.fits], [el.mFits, state.fits]]) {
+    btn.setAttribute('aria-pressed', String(on));
+  }
   el.fits.hidden = !state.showScores;
-  el.fits.setAttribute('aria-pressed', String(state.fits));
-  el.resetFilters.hidden = !hasActiveFilters();
-  el.mBudget.setAttribute('aria-pressed', String(state.budgetOnly));
   el.mFits.hidden = !state.showScores;
-  el.mFits.setAttribute('aria-pressed', String(state.fits));
+  el.resetFilters.hidden = !hasActiveFilters();
   renderChips();
-  el.scoresToggle.checked = state.showScores;
   if (el.q.value.trim() !== state.q) el.q.value = state.q;
   const marginOpt = el.sort.querySelector('[value="margin-desc"]');
   if (marginOpt) marginOpt.disabled = !state.showScores;
   el.sort.value = state.sort;
   $('mSortLabel').textContent = SORT_SHORT[state.sort] ?? 'Балл ↓';
+  el.views.querySelectorAll('[data-view]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.view === state.view)));
 }
 
 /** Включённые фильтры плашками с крестиком (видны на телефоне под поиском). */
 function renderChips() {
   const cityName = state.city ? index.cities.get(state.city)?.name ?? '' : '';
   const chips = [
-    state.city && ['city', `📍 ${cityName.split(' и ')[0]}`],
-    state.uni && ['uni', `🏛️ ${index.unis.get(state.uni)?.name ?? ''}`],
-    state.dir && ['dir', `🧭 ${index.programs.find((p) => p.dirKey === state.dir)?.name ?? ''}`],
-    (state.forms.size || state.levels.size) && ['form', `🗓️ ${[...state.forms, ...state.levels].join(', ')}`],
-    hasScoreFilter(state, index.scoreBounds) && ['score', `🎯 ${state.min ?? index.scoreBounds.min}–${state.max ?? index.scoreBounds.max}`],
+    state.city && ['city', cityName.split(' и ')[0]],
+    state.uni && ['uni', index.unis.get(state.uni)?.name ?? ''],
+    state.dir && ['dir', index.programs.find((p) => p.dirKey === state.dir)?.name ?? ''],
+    !state.dir && state.areas.size && ['dir', areasLabel(state.areas)],
+    (state.forms.size || state.levels.size) && ['form', [...state.forms, ...state.levels].join(', ')],
+    hasScoreFilter(state, index.scoreBounds) && ['score', `балл ${state.min ?? index.scoreBounds.min}–${state.max ?? index.scoreBounds.max}`],
     state.budgetOnly && ['budget', 'Только бюджет'],
     state.fits && ['fits', 'Хватает баллов'],
   ].filter(Boolean);
   el.mChips.innerHTML = chips.map(([kind, text]) =>
-    `<button type="button" class="mchip" data-clear="${kind}" aria-label="Убрать фильтр: ${esc(text)}"><span>${esc(text)}</span> ✕</button>`).join('');
+    `<button type="button" class="mchip" data-clear="${kind}" aria-label="Убрать фильтр: ${esc(text)}"><span>${esc(text)}</span>${icon('x')}</button>`).join('');
   el.mCount.textContent = chips.length;
   el.mCount.hidden = !chips.length;
 }
 
 function hasActiveFilters() {
-  return Boolean(state.city || state.uni || state.dir || state.forms.size || state.levels.size || state.q
+  return Boolean(state.city || state.uni || state.dir || state.areas.size || state.forms.size || state.levels.size || state.q
     || state.budgetOnly || state.fits || hasScoreFilter(state, index.scoreBounds));
 }
 
 function renderSubjectsHint() {
-  const n = state.subjects.size;
-  const left = MIN_SUBJECTS - n;
   const base = state.mathBase ? ' Базовую математику вузы не засчитывают: покажем программы, где она не нужна.' : '';
-  el.subjectsHint.innerHTML = (left > 0
-    ? `Русский и математика уже отмечены. Добавь ещё ${left} ${pluralize(left, 'предмет', 'предмета', 'предметов')}.`
-    : `Выбрано <b>${n}</b> ${pluralize(n, 'предмет', 'предмета', 'предметов')}. Зелёное «+N» — сколько ещё программ откроет предмет.`) + base;
+  el.subjectsHint.innerHTML = (results.ready
+    ? 'Цифра «+N» у предмета — сколько ещё программ он добавит. Впиши баллы, чтобы увидеть свои шансы.'
+    : 'Русский и математика уже отмечены. Отметь хотя бы один предмет по выбору, и ниже появятся программы.') + base;
+}
+
+/**
+ * «Как пользоваться» — это три шага прямо над подбором. Они отмечаются по ходу дела:
+ * человек видит и порядок действий, и где он сейчас.
+ */
+function renderStepper() {
+  const fits = state.showScores ? results.items.filter((i) => i.margin != null && i.margin >= 0).length : 0;
+  const scoresNote = !state.showScores ? 'необязательно, но покажет шансы'
+    : chancesCounted() ? `проходишь на ${fits.toLocaleString('ru')}` : 'впиши баллы по всем предметам';
+  const steps = [
+    [results.ready, results.ready ? 'готово' : 'отметь хотя бы один по выбору'],
+    [state.showScores, scoresNote],
+    [state.favs.size > 0, state.favs.size ? `в избранном ${state.favs.size}` : 'фильтры, избранное и сравнение'],
+  ];
+  const current = steps.findIndex(([done], i) => !done && (i !== 2 || results.ready));
+  el.stepper.querySelectorAll('[data-step]').forEach((li, i) => {
+    const [done, note] = steps[i];
+    li.classList.toggle('is-done', done);
+    li.classList.toggle('is-current', i === current);
+    li.querySelector('.stepper__n').textContent = done ? '✓' : i + 1;
+    li.querySelector('.stepper__note').textContent = note;
+  });
 }
 
 function renderSummary() {
@@ -638,61 +839,98 @@ function renderSummary() {
     ? (found ? `Показать ${found.toLocaleString('ru')} ${pluralize(found, 'программу', 'программы', 'программ')}` : 'Ничего не нашлось')
     : 'Сначала выбери предметы';
   if (!results.ready) {
-    el.summary.textContent = 'Выбери предметы, чтобы увидеть направления';
+    el.summary.textContent = 'Здесь появятся программы, когда отметишь предметы';
     return;
   }
   const n = results.items.length;
   const unis = new Set(results.items.map((i) => i.p.uni)).size;
+  const fits = state.showScores ? results.items.filter((i) => i.margin != null && i.margin >= 0).length : 0;
+  // Пока не вписаны баллы по всем экзаменам хоть одной программы, «проходишь на 0» звучит как приговор.
+  const chances = !state.showScores ? ''
+    : chancesCounted() ? `, проходишь на ${fits ? `<mark>${fits.toLocaleString('ru')}</mark>` : '0'}`
+      : '. Чтобы посчитать шансы, впиши баллы по всем своим предметам';
   el.summary.innerHTML = n
-    ? `Нашли <b>${n.toLocaleString('ru')}</b> ${pluralize(n, 'программу', 'программы', 'программ')} в <b>${unis}</b> ${pluralize(unis, 'вузе', 'вузах', 'вузах')}`
+    ? `<b>${n.toLocaleString('ru')}</b> ${pluralize(n, 'программа', 'программы', 'программ')} в <b>${unis}</b> ${pluralize(unis, 'вузе', 'вузах', 'вузах')}${chances}`
     : 'Ничего не нашлось';
 }
 
-const PROMO_AT = 6; // после какой карточки на первой странице показать ненавязчивую плашку Премиума
+/** Заметное предложение показать только программы, куда хватает баллов (то же, что «Хватает моих баллов»). */
+function renderFitsBar() {
+  const bar = $('fitsBar');
+  const fits = results.ready && state.showScores ? results.items.filter((i) => i.margin != null && i.margin >= 0).length : 0;
+  const total = results.ready ? results.items.length : 0;
+  if (state.fits && total) {
+    bar.innerHTML = `<span>Показаны только программы, куда хватает твоих баллов: <b>${total.toLocaleString('ru')}</b></span>
+      <button type="button" class="btn btn--ghost btn--sm" data-fits>Показать все</button>`;
+  } else if (!state.fits && fits && fits < total) {
+    bar.innerHTML = `<span>Ты проходишь на <mark>${fits.toLocaleString('ru')}</mark> ${pluralize(fits, 'программу', 'программы', 'программ')} из ${total.toLocaleString('ru')}.</span>
+      <button type="button" class="btn btn--primary btn--sm" data-fits>Показать только их</button>`;
+  } else {
+    bar.innerHTML = '';
+  }
+  bar.hidden = !bar.innerHTML;
+}
 
-function renderCards() {
+/** Посчитана ли сумма баллов хотя бы для одной найденной программы. */
+const chancesCounted = () => results.items.some((i) => i.mine != null);
+
+function renderList() {
   el.pager.hidden = true;
+  el.list.classList.toggle('cards--unis', state.view === 'unis');
   if (!results.ready) {
-    el.cards.innerHTML = '';
-    const left = MIN_SUBJECTS - state.subjects.size;
+    el.list.innerHTML = '';
     el.empty.hidden = false;
     el.empty.innerHTML = `
-      <div class="empty__icon" aria-hidden="true">👆</div>
-      <p class="empty__title">Отметь ещё ${left} ${pluralize(left, 'предмет', 'предмета', 'предметов')}</p>
-      <p>Русский и математика уже учтены, они обязательны. Зелёные цифры на предметах подскажут, какой выбор откроет больше программ.</p>`;
+      <p class="empty__title">Отметь хотя бы один предмет по выбору</p>
+      <p>Русский и математика уже учтены, они обязательны. Цифра «+N» на предмете подскажет, сколько программ он откроет.</p>`;
     return;
   }
   if (!results.items.length) {
-    el.cards.innerHTML = '';
+    el.list.innerHTML = '';
     el.empty.hidden = false;
     const filtered = hasActiveFilters();
     el.empty.innerHTML = `
-      <div class="empty__icon" aria-hidden="true">🔍</div>
       <p class="empty__title">Подходящих программ нет</p>
       <p>${filtered ? 'Попробуй ослабить фильтры или поменять набор предметов.'
-        : state.mathBase ? 'С базовой математикой и этими предметами программ не нашлось. Добавь предмет с зелёной цифрой или переключи математику на профиль.'
-          : 'С этим набором предметов ничего не нашлось. Попробуй добавить предмет с зелёной цифрой.'}</p>
+        : state.mathBase ? 'С базовой математикой и этими предметами программ не нашлось. Добавь предмет с цифрой «+N» или переключи математику на профиль.'
+          : 'С этим набором предметов ничего не нашлось. Попробуй добавить предмет с цифрой «+N».'}</p>
       ${filtered ? '<button type="button" class="btn btn--primary" data-action="reset-filters">Сбросить фильтры</button>' : ''}`;
     return;
   }
   el.empty.hidden = true;
-  const pages = Math.ceil(results.items.length / PAGE_SIZE);
+  const rows = state.view === 'unis' ? results.groups : results.items;
+  const pages = Math.ceil(rows.length / PAGE_SIZE);
   page = Math.min(Math.max(1, page), pages);
-  const cards = results.items.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((item) => renderCard(item, index, state));
-  if (page === 1 && cards.length > PROMO_AT + 2) cards.splice(PROMO_AT, 0, PROMO_CARD);
-  el.cards.innerHTML = cards.join('');
-  renderPager(pages);
+  const slice = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const selected = effectiveSubjects(state);
+  const html = state.view === 'unis'
+    ? slice.map((g) => renderUniRow(g, state))
+    : slice.map((item) => renderCard(item, index, state, selected));
+  const hint = state.view === 'programs' && page === 1 ? strategyHint() : '';
+  if (hint && html.length > HINT_AT + 2) html.splice(HINT_AT, 0, hint);
+  el.list.innerHTML = html.join('');
+  renderPager(pages, rows.length, state.view === 'unis' ? ['вуз', 'вуза', 'вузов'] : ['программа', 'программы', 'программ']);
 }
 
-const PROMO_CARD = `
-  <li class="promo-card">
-    <span class="promo-card__icon" aria-hidden="true">🎯</span>
-    <div><b>Не знаешь, куда подать 5 заявлений?</b><span>Премиум соберёт стратегию: вуз мечты, реальные варианты и надёжный запасной.</span></div>
-    <button type="button" class="btn btn--premium btn--sm" data-premium>Подробнее</button>
+/**
+ * Премиум предлагаем к месту: когда баллы введены и уже понятно, на что человек проходит.
+ * Подсказку можно закрыть, и она больше не появится.
+ */
+function strategyHint() {
+  if (!state.showScores || load(STORE.hintOff)) return '';
+  const fits = results.items.filter((i) => i.margin != null && i.margin >= 0).length;
+  if (!fits) return '';
+  return `
+  <li class="hint-card">
+    <p class="hint-card__text"><b>Твои баллы проходят на ${fits.toLocaleString('ru')} ${pluralize(fits, 'программу', 'программы', 'программ')}.</b>
+      Не знаешь, какие выбрать? Опиши ИИ-помощнику, чего хочешь, и он сузит список.</p>
+    <button type="button" class="btn btn--primary btn--sm" data-ask>Спросить ИИ</button>
+    <button type="button" class="icon-btn" data-dismiss-hint aria-label="Скрыть подсказку">${icon('x')}</button>
   </li>`;
+}
 
 /** Номера страниц: ← 1 … 4 5 6 … 20 → */
-function renderPager(pages) {
+function renderPager(pages, total, forms) {
   if (pages <= 1) return;
   const sorted = [...new Set([1, pages, page - 1, page, page + 1])].filter((n) => n >= 1 && n <= pages).sort((a, b) => a - b);
   const num = (n) => `<button type="button" class="pager__btn${n === page ? ' is-current' : ''}" data-page="${n}"${n === page ? ' aria-current="page"' : ''}>${n}</button>`;
@@ -704,9 +942,9 @@ function renderPager(pages) {
   });
   parts.push(arrow(page + 1, '→', 'Следующая страница', page === pages));
   const from = (page - 1) * PAGE_SIZE + 1;
-  const to = Math.min(page * PAGE_SIZE, results.items.length);
+  const to = Math.min(page * PAGE_SIZE, total);
   el.pager.innerHTML = `<div class="pager__btns">${parts.join('')}</div>
-    <span class="pager__info">${from}–${to} из ${results.items.length.toLocaleString('ru')}</span>`;
+    <span class="pager__info">${from}–${to} из ${total.toLocaleString('ru')} ${pluralize(total, ...forms)}</span>`;
   el.pager.hidden = false;
 }
 
@@ -716,79 +954,99 @@ function showFatal(err) {
   el.empty.hidden = false;
   el.summary.textContent = 'Данные не загрузились';
   el.empty.innerHTML = `
-    <div class="empty__icon" aria-hidden="true">⚠️</div>
-    <p class="empty__title">Не удалось загрузить data/data.json</p>
+    <p class="empty__title">Не удалось загрузить данные</p>
     <p>${fileMode
       ? 'Страница открыта как файл, а браузер не даёт так читать JSON. Запустите <code>start.bat</code> или откройте dist/unimatch.html.'
-      : `Проверьте, что файл data/data.json опубликован рядом с index.html. (${esc(err.message)})`}</p>`;
+      : `Обнови страницу через минуту. Если не помогает, проверь интернет или зайди позже.</p>
+    <p class="muted">Для автора сайта: data/data.json должен лежать рядом с index.html (${esc(err.message)}).`}</p>`;
 }
 
-// ------------------------------------------------------------------ избранное и сравнение
+// ------------------------------------------------------------------ хранилище браузера
 
-const MAX_COMPARE = 4;
+function load(key) {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function save(key, value) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // приватный режим: просто не сохраняем между визитами
+  }
+}
 
 function loadSet(key) {
   try {
-    const list = JSON.parse(localStorage.getItem(key) ?? '[]');
+    const list = JSON.parse(load(key) ?? '[]');
     return new Set(Array.isArray(list) ? list.filter((k) => index.byKey.has(k)) : []);
   } catch {
     return new Set();
   }
 }
 
-function saveSet(key, set) {
-  try {
-    localStorage.setItem(key, JSON.stringify([...set]));
-  } catch {
-    // приватный режим: просто не сохраняем между визитами
-  }
-}
+const saveSet = (key, set) => save(key, JSON.stringify([...set]));
 
 function toggleIn(set, key, storageKey) {
   set.has(key) ? set.delete(key) : set.add(key);
   saveSet(storageKey, set);
 }
 
-/** Обновляет счётчики, панель сравнения и кнопки на уже нарисованных карточках. */
+// ------------------------------------------------------------------ избранное и сравнение
+
+/** Обновляет счётчики, шаги, панель сравнения и кнопки на уже нарисованных карточках. */
 function syncCollections() {
   $('favCount').textContent = state.favs.size;
   $('favCount').hidden = !state.favs.size;
+  // На телефоне от кнопки видно только сердечко и число: проговариваем число и для скринридера.
+  $('favBtn').setAttribute('aria-label', state.favs.size ? `Избранное: ${state.favs.size}` : 'Избранное');
   const n = state.cmp.size;
   $('cmpBar').hidden = n === 0;
   document.body.classList.toggle('has-cmpbar', n > 0);
-  $('cmpText').innerHTML = `⚖ В сравнении <b>${n}</b> из ${MAX_COMPARE}` + (n < 2 ? ' · добавь ещё одну' : '');
+  $('cmpText').innerHTML = `Сравнение: <b>${n}</b> из ${MAX_COMPARE}` + (n < 2 ? ' · добавь ещё' : '');
   $('cmpOpen').disabled = n < 2;
   document.querySelectorAll('[data-fav]').forEach((b) => {
     const on = state.favs.has(b.dataset.fav);
     b.classList.toggle('is-on', on);
     b.setAttribute('aria-pressed', String(on));
-    b.textContent = on ? '♥' : '♡';
     b.title = on ? 'Убрать из избранного' : 'В избранное';
   });
   document.querySelectorAll('[data-cmp]').forEach((b) => {
     const on = state.cmp.has(b.dataset.cmp);
     b.classList.toggle('is-on', on);
     b.setAttribute('aria-pressed', String(on));
-    b.textContent = on ? '⚖ В сравнении' : '⚖ Сравнить';
+    b.querySelector('span').textContent = on ? 'В сравнении' : 'Сравнить';
   });
+  renderStepper();
 }
 
 function itemFor(p) {
   const mine = state.showScores ? myTotal(p, effectiveSubjects(state), state.myScores) : null;
-  return { p, mine, margin: mine != null && p.score != null ? mine - p.score : null };
+  return { p, mine, margin: marginFor(p, mine) };
 }
 
 function renderFavorites() {
   const items = [...state.favs].map((k) => index.byKey.get(k)).filter(Boolean).map(itemFor);
+  const selected = effectiveSubjects(state);
+  // Три и больше программ в избранном — самое время сохранить подборку в PDF или спросить ИИ.
+  const nudge = items.length >= 3 ? `
+    <li class="hint-card">
+      <p class="hint-card__text"><b>У тебя ${items.length} ${pluralize(items.length, 'программа', 'программы', 'программ')} в избранном.</b>
+        В Премиуме их можно сохранить в PDF и показать родителям или спросить ИИ-помощника, куда подать.</p>
+      <button type="button" class="btn btn--primary btn--sm" data-premium>Подробнее</button>
+    </li>` : '';
   $('favList').innerHTML = items.length
-    ? items.map((item) => renderCard(item, index, state)).join('')
-    : '<li class="empty"><div class="empty__icon">♡</div><p class="empty__title">Здесь пока пусто</p><p>Нажми «♡ В избранное» на карточке программы, чтобы сохранить её. Список хранится в этом браузере.</p></li>';
+    ? nudge + items.map((item) => renderCard(item, index, state, selected)).join('')
+    : '<li class="empty"><p class="empty__title">Здесь пока пусто</p><p>Нажми на сердечко на карточке программы, чтобы сохранить её. Список хранится в этом браузере.</p></li>';
 }
 
 function examText(p) {
   const name = (id) => index.subjects.get(id)?.short ?? id;
   const parts = p.req.map(name);
-  for (const g of p.choice) parts.push(g.length > 4 ? 'иностранный' : g.map(name).join(' / '));
+  for (const g of p.choice) parts.push(g.length > 4 ? 'иностранный' : g.map(name).join(' или '));
   return parts.join(', ') + (p.extra.length ? ' + экзамен вуза' : '');
 }
 
@@ -803,16 +1061,17 @@ function renderCompare() {
       : `<span class="cmp-score${i.p.score === best && items.length > 1 ? ' is-best' : ''}">${i.p.score}</span><small>${i.p.year}${i.p.dvi ? ' · с экзаменом вуза' : ''}</small>`)],
   ];
   if (state.showScores) {
-    rows.push(['Мои шансы', (i) => (i.margin == null ? '<span class="muted">введи баллы</span>'
-      : `<span class="mine mine--${i.margin >= 10 ? 'good' : i.margin >= 0 ? 'edge' : 'bad'}">${i.margin >= 0 ? `запас +${i.margin}` : `не хватает ${-i.margin}`}</span>`)]);
+    rows.push(['Мои шансы', (i) => (i.margin == null
+      ? `<span class="muted">${i.mine == null ? 'впиши баллы' : i.p.score == null ? 'нет проходного' : i.p.dvi ? 'не сравнить: экзамен вуза' : 'не сравнить: доп. баллы'}</span>`
+      : i.margin >= 0 ? `<mark>запас +${i.margin}</mark>` : `<span class="pen">не хватает ${-i.margin}</span>`)]);
   }
   rows.push(
     ['Экзамены', (i) => esc(examText(i.p))],
-    ['Платно в год', (i) => (i.p.cost ? `<b>${i.p.cost.toLocaleString('ru')} ₽</b>` : '<span class="muted">нет данных</span>')],
+    ['Платно в год', (i) => (i.p.cost ? `<b>${i.p.cost.toLocaleString('ru')} ₽</b>` : '<span class="muted">нет данных</span>')],
     ['Форма и уровень', (i) => esc(`${i.p.form}, ${i.p.level || '—'}`)],
     ['Факультет', (i) => esc(i.p.faculty || '—')],
-    ['', (i) => `<a class="card__link" href="${esc(officialProgramUrl(i.p, i.p.uniObj))}" target="_blank" rel="noopener noreferrer">Сайт вуза ↗</a>
-      <button type="button" class="card__act" data-rm="${esc(progKey(i.p))}">✕ Убрать</button>`],
+    ['', (i) => `<a class="card__link" href="${esc(officialProgramUrl(i.p, i.p.uniObj))}" target="_blank" rel="noopener noreferrer">Найти программу</a>
+      <button type="button" class="act" data-rm="${esc(progKey(i.p))}">${icon('x')}<span>Убрать</span></button>`],
   );
   $('cmpTable').innerHTML = `<table class="cmp"><tbody>${rows.map(([label, cell]) =>
     `<tr><th scope="row">${label}</th>${items.map((i) => `<td>${cell(i)}</td>`).join('')}</tr>`).join('')}</tbody></table>

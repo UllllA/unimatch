@@ -4,158 +4,154 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>UniMatch — подбор вуза по предметам ЕГЭ</title>
-  <meta name="description" content="Отметь предметы ЕГЭ и получи список направлений и вузов с проходными баллами. Поиск по вузам и регионам, фильтры по форме обучения и баллу.">
-  <meta name="theme-color" content="#6c4cf1">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🎓%3C/text%3E%3C/svg%3E">
+  <meta name="description" content="Отметь предметы ЕГЭ и впиши баллы: покажем направления и вузы, куда с ними берут, проходные баллы на бюджет, цены платного и твои шансы.">
+  <meta name="theme-color" content="#fbfaf5">
+  <!-- превью ссылки в Telegram и ВК: кнопка «Поделиться» отправляет именно её -->
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="ru_RU">
+  <meta property="og:title" content="UniMatch — подбор вуза по предметам ЕГЭ">
+  <meta property="og:description" content="Отметь предметы ЕГЭ и впиши баллы: направления и вузы, проходные на бюджет, цены платного и твои шансы.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232f4bb3'/%3E%3Cpath d='M10 9v8a6 6 0 0 0 12 0V9' fill='none' stroke='%23ffe45c' stroke-width='3.4' stroke-linecap='round'/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="assets/css/styles.css">
   <script>try { if (localStorage.getItem('unimatch:theme') === 'dark') document.documentElement.dataset.theme = 'dark'; } catch (e) {}</script>
   <script type="module" src="assets/js/app.js"></script>
 </head>
 <body>
   <a class="skip-link" href="#results">К результатам</a>
+  <noscript><p class="demo-banner noscript">Подбор работает только с включённым JavaScript. Включи его в настройках браузера и обнови страницу.</p></noscript>
 
   <header class="topbar">
     <div class="container topbar__inner">
       <a class="logo" href="./" aria-label="UniMatch — на главную">
-        <span class="logo__mark" aria-hidden="true">🎓</span>
+        <svg class="logo__mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#2f4bb3"/><path d="M10 9v8a6 6 0 0 0 12 0V9" fill="none" stroke="#ffe45c" stroke-width="3.4" stroke-linecap="round"/></svg>
         <span>Uni<b>Match</b></span>
       </a>
       <nav class="topbar__nav" aria-label="Разделы">
         <a href="#tool">Подбор</a>
-        <a href="#how">Как это работает</a>
         <a href="#about-data">О данных</a>
       </nav>
       <button type="button" class="theme" id="themeToggle" role="switch" aria-checked="false" aria-label="Тёмная тема" title="Светлая или тёмная тема">
-        <span class="theme__opt" aria-hidden="true">☀️</span><span class="theme__opt" aria-hidden="true">🌙</span>
+        <span class="theme__opt"><i data-icon="sun"></i></span><span class="theme__opt"><i data-icon="moon"></i></span>
       </button>
-      <button type="button" class="btn btn--ghost btn--sm topbar__fav" id="favBtn" aria-label="Избранное">♥<span class="hide-sm"> Избранное</span> <span class="count" id="favCount">0</span></button>
-      <button type="button" class="btn btn--premium" id="premiumBtn">✨ Премиум</button>
+      <button type="button" class="btn btn--ghost btn--sm topbar__fav" id="favBtn" aria-label="Избранное">
+        <i data-icon="heart"></i><span class="hide-sm">Избранное</span><span class="count" id="favCount" hidden>0</span>
+      </button>
+      <button type="button" class="btn btn--outline btn--sm" id="premiumBtn">Премиум</button>
     </div>
   </header>
 
-  <section class="hero">
-    <div class="hero__blob hero__blob--1" aria-hidden="true"></div>
-    <div class="hero__blob hero__blob--2" aria-hidden="true"></div>
-    <div class="container hero__grid">
-      <div class="hero__content">
-        <span class="hero__badge">Бесплатно · проходные баллы 2025 года</span>
-        <h1>Куда поступить <span class="gradient-text">с твоими ЕГЭ?</span></h1>
-        <p>Отметь предметы, и мы покажем направления и вузы, куда с ними берут: проходные баллы, цены и шансы.</p>
-        <ol class="how" id="how" aria-label="Как это работает">
-          <li><span class="how__n">1</span><div><b>Отметь предметы</b><span>«+N» подскажет, какой откроет больше программ</span></div></li>
-          <li><span class="how__n">2</span><div><b>Найди своё</b><span>поиск по вузу, региону и направлению</span></div></li>
-          <li><span class="how__n">3</span><div><b>Оцени шансы</b><span>введи баллы и сравни с проходным</span></div></li>
-        </ol>
-        <div class="hero__stats" id="heroStats" aria-live="polite"></div>
+  <main id="tool">
+    <section class="container intro">
+      <h1>Куда поступить <mark class="hl">с&nbsp;твоими ЕГЭ</mark></h1>
+      <p class="intro__sub">Отметь предметы, которые сдаёшь, и впиши баллы. Покажем направления и вузы, куда с ними берут, проходные на бюджет, цены платного и твои шансы.</p>
+      <p class="intro__meta" id="heroStats" aria-live="polite"></p>
+      <form class="ask" id="askForm" aria-label="ИИ-помощник">
+        <label class="ask__label" for="askInput"><i data-icon="sparkle"></i>Или опиши словами, что ищешь <span class="ask__badge">ИИ · бета</span></label>
+        <div class="ask__row">
+          <input type="text" id="askInput" maxlength="300" autocomplete="off" enterkeyhint="search"
+            placeholder="Например: хочу в айти в Питере, 230 баллов, только бюджет">
+          <button type="submit" class="btn btn--primary">Подобрать</button>
+        </div>
+        <div class="ask__examples">
+          <span>Попробуй:</span>
+          <button type="button" class="chip" data-example="Информатика, хочу в айти в Питере, 230 баллов, только бюджет">айти в Питере</button>
+          <button type="button" class="chip" data-example="Химия и биология, хочу стать врачом в Казани">врач в Казани</button>
+          <button type="button" class="chip" data-example="Русский 85, обществознание 80, история 75, математика база, хочу на юриста в Москве">юрист в Москве</button>
+        </div>
+        <div class="ask__reply" id="askReply" aria-live="polite" hidden></div>
+      </form>
+    </section>
+
+    <div class="container">
+      <div class="demo-banner" id="demoBanner" role="note" hidden>
+        <b>Демо-данные.</b> Баллы сгенерированы случайно для проверки интерфейса. Не выбирай вуз по этим цифрам.
       </div>
-      <aside class="plans" aria-label="Бесплатно и Премиум">
-        <div class="plan">
-          <p class="plan__name">Бесплатно</p>
-          <ul>
-            <li>Подбор по предметам ЕГЭ</li>
-            <li>Проходные баллы и цены</li>
-            <li>Фильтры, поиск, избранное</li>
-            <li>Сравнение программ</li>
-          </ul>
-        </div>
-        <div class="plan plan--pro">
-          <p class="plan__name">✨ Премиум <span class="plan__price">399 ₽</span></p>
-          <ul>
-            <li><b>Стратегия 5 заявлений</b>: мечта, реальные, запасной</li>
-            <li>Прогноз шансов на 2026 год</li>
-            <li>Напоминания о дедлайнах в Telegram</li>
-            <li>Подборка в PDF для родителей</li>
-          </ul>
-          <button type="button" class="btn btn--premium btn--sm btn--block" data-premium>Что входит в Премиум</button>
-        </div>
-      </aside>
     </div>
-  </section>
 
-  <div class="container">
-    <div class="demo-banner" id="demoBanner" role="note" hidden>
-      <b>Демо-данные.</b> Баллы сгенерированы случайно для проверки интерфейса. Не выбирай вуз по этим цифрам.
-    </div>
-  </div>
+    <div class="container tool">
+      <ol class="stepper" id="stepper" aria-label="Как пользоваться">
+        <li data-step="1"><button type="button" data-goto="subjects">
+          <span class="stepper__n">1</span><span class="stepper__text"><b>Отметь предметы</b><small class="stepper__note"></small></span>
+        </button></li>
+        <li data-step="2"><button type="button" data-goto="scores">
+          <span class="stepper__n">2</span><span class="stepper__text"><b>Впиши баллы</b><small class="stepper__note"></small></span>
+        </button></li>
+        <li data-step="3"><button type="button" data-goto="results">
+          <span class="stepper__n">3</span><span class="stepper__text"><b>Выбери программы</b><small class="stepper__note"></small></span>
+        </button></li>
+      </ol>
 
-  <main id="tool" class="container tool">
-    <section class="panel subjects-panel" aria-labelledby="subjectsTitle">
-      <div class="panel__head">
-        <div>
-          <h2 id="subjectsTitle"><span class="step">1</span> Какие ЕГЭ ты сдаёшь?</h2>
-          <p class="muted" id="subjectsHint" aria-live="polite"></p>
-        </div>
-        <div class="panel__actions">
-          <label class="switch">
-            <input type="checkbox" id="scoresToggle">
-            <span class="switch__track" aria-hidden="true"></span>
-            <span>Ввести мои баллы</span>
-          </label>
+      <section class="panel" aria-labelledby="subjectsTitle">
+        <div class="panel__head">
+          <div>
+            <h2 id="subjectsTitle">Какие ЕГЭ ты сдаёшь?</h2>
+            <p class="muted" id="subjectsHint" aria-live="polite"></p>
+          </div>
           <button type="button" class="btn btn--ghost btn--sm" id="resetSubjects">Сбросить</button>
         </div>
-      </div>
-      <div class="subjects" id="subjectsGrid" role="group" aria-labelledby="subjectsTitle"></div>
-    </section>
+        <div class="subjects" id="subjectsGrid" role="group" aria-labelledby="subjectsTitle"></div>
+      </section>
 
-    <section class="results" id="results" aria-labelledby="resultsTitle" tabindex="-1">
-      <div class="results__head">
-        <h2 id="resultsTitle"><span class="step">2</span> Подходящие направления</h2>
-        <p class="results__summary" id="resultsSummary" aria-live="polite">Загружаем данные…</p>
-      </div>
-
-      <div class="fbar" id="filterBar">
-        <div class="fbar__box">
-          <div class="fbar__row">
-            <div class="search">
-              <span class="search__icon" aria-hidden="true">🔍</span>
-              <input type="search" id="q" placeholder="Вуз, направление или код" aria-label="Поиск по направлениям, вузам и регионам" autocomplete="off">
-            </div>
-            <button type="button" class="mfilters" id="mFilters" aria-haspopup="dialog">⚙ Фильтры <span class="count" id="mFiltersCount" hidden>0</span></button>
-            <button type="button" class="msort" data-pop="sort" aria-haspopup="dialog" aria-expanded="false">↕ <span id="mSortLabel">Балл ↓</span></button>
-            <label class="sort">
-              <span class="sort__label">Сортировка</span>
-              <select id="sort" aria-label="Сортировка"></select>
-            </label>
+      <section class="results" id="results" aria-labelledby="resultsTitle" tabindex="-1">
+        <div class="results__head">
+          <div>
+            <h2 id="resultsTitle">Подходящие направления</h2>
+            <p class="results__summary" id="resultsSummary" aria-live="polite">Загружаем данные…</p>
           </div>
-          <div class="mchips" id="mChips" aria-label="Включённые фильтры"></div>
-          <div class="fbar__pills" role="toolbar" aria-label="Фильтры">
-            <div class="fbar__group">
-              <button type="button" class="fpill" data-pop="city" aria-haspopup="dialog" aria-expanded="false">
-                <span class="fpill__icon" aria-hidden="true">📍</span><span class="fpill__label">Регион</span><span class="fpill__caret" aria-hidden="true">▾</span>
-              </button>
-              <button type="button" class="fpill" data-pop="uni" aria-haspopup="dialog" aria-expanded="false">
-                <span class="fpill__icon" aria-hidden="true">🏛️</span><span class="fpill__label">Вуз</span><span class="fpill__caret" aria-hidden="true">▾</span>
-              </button>
-              <button type="button" class="fpill" data-pop="dir" aria-haspopup="dialog" aria-expanded="false">
-                <span class="fpill__icon" aria-hidden="true">🧭</span><span class="fpill__label">Направление</span><span class="fpill__caret" aria-hidden="true">▾</span>
-              </button>
-              <button type="button" class="fpill" data-pop="form" aria-haspopup="dialog" aria-expanded="false">
-                <span class="fpill__icon" aria-hidden="true">🗓️</span><span class="fpill__label">Форма и уровень</span><span class="fpill__caret" aria-hidden="true">▾</span>
-              </button>
-              <button type="button" class="fpill" data-pop="score" aria-haspopup="dialog" aria-expanded="false">
-                <span class="fpill__icon" aria-hidden="true">🎯</span><span class="fpill__label">Проходной балл</span><span class="fpill__caret" aria-hidden="true">▾</span>
-              </button>
+          <div class="results__tools">
+            <div class="viewsw" id="viewSwitch" role="group" aria-label="Как показать список">
+              <button type="button" data-view="programs" aria-pressed="true"><i data-icon="list"></i>Программы</button>
+              <button type="button" data-view="unis" aria-pressed="false"><i data-icon="building"></i>Вузы</button>
             </div>
-            <div class="fbar__group fbar__group--toggles">
-              <button type="button" class="fcheck" id="budgetToggle" aria-pressed="false"><span class="fcheck__box" aria-hidden="true"></span>Только бюджет</button>
-              <button type="button" class="fcheck" id="fitsToggle" aria-pressed="false" hidden><span class="fcheck__box" aria-hidden="true"></span>Хватает моих баллов</button>
-              <button type="button" class="freset" id="resetFilters" hidden>✕ Сбросить</button>
+            <button type="button" class="btn btn--ghost btn--sm" id="shareBtn" title="Скопировать ссылку на эту подборку" aria-label="Поделиться подборкой"><i data-icon="share"></i><span class="hide-sm">Поделиться</span></button>
+          </div>
+        </div>
+
+        <div class="fbar" id="filterBar">
+          <div class="fbar__box">
+            <div class="fbar__row">
+              <div class="search">
+                <span class="search__icon"><i data-icon="search"></i></span>
+                <input type="search" id="q" placeholder="Вуз, направление или код" aria-label="Поиск по направлениям, вузам и регионам" autocomplete="off">
+              </div>
+              <button type="button" class="mfilters" id="mFilters" aria-haspopup="dialog"><i data-icon="sliders"></i>Фильтры <span class="count" id="mFiltersCount" hidden>0</span></button>
+              <button type="button" class="msort" data-pop="sort" aria-haspopup="dialog" aria-expanded="false"><i data-icon="sort"></i><span id="mSortLabel">Балл ↓</span></button>
+              <label class="sort">
+                <span class="sort__label">Сортировка</span>
+                <select id="sort" aria-label="Сортировка"></select>
+              </label>
+            </div>
+            <div class="mchips" id="mChips" aria-label="Включённые фильтры"></div>
+            <div class="fbar__pills" role="toolbar" aria-label="Фильтры">
+              <div class="fbar__group">
+                <button type="button" class="fpill" data-pop="city" aria-haspopup="dialog" aria-expanded="false"><i data-icon="pin"></i><span class="fpill__label">Регион</span><span class="fpill__caret" aria-hidden="true">▾</span></button>
+                <button type="button" class="fpill" data-pop="uni" aria-haspopup="dialog" aria-expanded="false"><i data-icon="building"></i><span class="fpill__label">Вуз</span><span class="fpill__caret" aria-hidden="true">▾</span></button>
+                <button type="button" class="fpill" data-pop="dir" aria-haspopup="dialog" aria-expanded="false"><i data-icon="compass"></i><span class="fpill__label">Направление</span><span class="fpill__caret" aria-hidden="true">▾</span></button>
+                <button type="button" class="fpill" data-pop="form" aria-haspopup="dialog" aria-expanded="false"><i data-icon="calendar"></i><span class="fpill__label">Форма и уровень</span><span class="fpill__caret" aria-hidden="true">▾</span></button>
+                <button type="button" class="fpill" data-pop="score" aria-haspopup="dialog" aria-expanded="false"><i data-icon="target"></i><span class="fpill__label">Проходной балл</span><span class="fpill__caret" aria-hidden="true">▾</span></button>
+              </div>
+              <div class="fbar__group fbar__group--toggles">
+                <button type="button" class="fcheck" id="budgetToggle" aria-pressed="false"><span class="fcheck__box" aria-hidden="true"></span>Только бюджет</button>
+                <button type="button" class="fcheck" id="fitsToggle" aria-pressed="false" hidden><span class="fcheck__box" aria-hidden="true"></span>Хватает моих баллов</button>
+                <button type="button" class="freset" id="resetFilters" hidden>Сбросить фильтры</button>
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      <ol class="cards" id="cards"></ol>
-      <div class="empty" id="emptyState" hidden></div>
-      <nav class="pager" id="pager" aria-label="Страницы результатов" hidden></nav>
-    </section>
+        <div class="fitsbar" id="fitsBar" role="status" hidden></div>
+        <ol class="cards" id="cards"></ol>
+        <div class="empty" id="emptyState" hidden></div>
+        <nav class="pager" id="pager" aria-label="Страницы результатов" hidden></nav>
+      </section>
+    </div>
   </main>
 
   <div class="cmpbar" id="cmpBar" hidden>
-    <div class="container cmpbar__inner">
+    <div class="cmpbar__inner">
       <span class="cmpbar__text" id="cmpText"></span>
       <button type="button" class="btn btn--ghost btn--sm" id="cmpClear">Очистить</button>
       <button type="button" class="btn btn--primary btn--sm" id="cmpOpen">Сравнить</button>
@@ -163,45 +159,35 @@
   </div>
 
   <dialog class="sheet" id="favDialog" aria-labelledby="favTitle">
-    <div class="sheet__head"><h2 id="favTitle">♥ Избранное</h2><button type="button" class="icon-btn" data-close aria-label="Закрыть">✕</button></div>
+    <div class="sheet__head"><h2 id="favTitle">Избранное</h2><button type="button" class="icon-btn" data-close aria-label="Закрыть"><i data-icon="x"></i></button></div>
     <div class="sheet__body"><ol class="cards cards--one" id="favList"></ol></div>
   </dialog>
 
   <dialog class="sheet sheet--wide" id="cmpDialog" aria-labelledby="cmpTitle">
-    <div class="sheet__head"><h2 id="cmpTitle">⚖ Сравнение программ</h2><button type="button" class="icon-btn" data-close aria-label="Закрыть">✕</button></div>
+    <div class="sheet__head"><h2 id="cmpTitle">Сравнение программ</h2><button type="button" class="icon-btn" data-close aria-label="Закрыть"><i data-icon="x"></i></button></div>
     <div class="sheet__body"><div class="cmp-scroll" id="cmpTable"></div></div>
   </dialog>
 
   <div class="fsheet" id="filterSheet" role="dialog" aria-modal="true" aria-labelledby="fsheetTitle" hidden>
     <div class="fsheet__head">
       <b id="fsheetTitle">Фильтры</b>
-      <button type="button" class="icon-btn" id="fsheetClose" aria-label="Закрыть">✕</button>
+      <button type="button" class="icon-btn" id="fsheetClose" aria-label="Закрыть"><i data-icon="x"></i></button>
     </div>
     <div class="fsheet__body">
       <button type="button" class="frow" data-pop="city" aria-haspopup="dialog" aria-expanded="false">
-        <span class="frow__icon" aria-hidden="true">📍</span>
-        <span class="frow__text"><span class="frow__name">Регион</span><span class="frow__value">Все регионы</span></span>
-        <span class="frow__arrow" aria-hidden="true">›</span>
+        <span class="frow__text"><span class="frow__name">Регион</span><span class="frow__value">Все регионы</span></span><span class="frow__arrow" aria-hidden="true">›</span>
       </button>
       <button type="button" class="frow" data-pop="uni" aria-haspopup="dialog" aria-expanded="false">
-        <span class="frow__icon" aria-hidden="true">🏛️</span>
-        <span class="frow__text"><span class="frow__name">Вуз</span><span class="frow__value">Все вузы</span></span>
-        <span class="frow__arrow" aria-hidden="true">›</span>
+        <span class="frow__text"><span class="frow__name">Вуз</span><span class="frow__value">Все вузы</span></span><span class="frow__arrow" aria-hidden="true">›</span>
       </button>
       <button type="button" class="frow" data-pop="dir" aria-haspopup="dialog" aria-expanded="false">
-        <span class="frow__icon" aria-hidden="true">🧭</span>
-        <span class="frow__text"><span class="frow__name">Направление</span><span class="frow__value">Все направления</span></span>
-        <span class="frow__arrow" aria-hidden="true">›</span>
+        <span class="frow__text"><span class="frow__name">Направление</span><span class="frow__value">Все направления</span></span><span class="frow__arrow" aria-hidden="true">›</span>
       </button>
       <button type="button" class="frow" data-pop="form" aria-haspopup="dialog" aria-expanded="false">
-        <span class="frow__icon" aria-hidden="true">🗓️</span>
-        <span class="frow__text"><span class="frow__name">Форма и уровень</span><span class="frow__value">Любые</span></span>
-        <span class="frow__arrow" aria-hidden="true">›</span>
+        <span class="frow__text"><span class="frow__name">Форма и уровень</span><span class="frow__value">Любые</span></span><span class="frow__arrow" aria-hidden="true">›</span>
       </button>
       <button type="button" class="frow" data-pop="score" aria-haspopup="dialog" aria-expanded="false">
-        <span class="frow__icon" aria-hidden="true">🎯</span>
-        <span class="frow__text"><span class="frow__name">Проходной балл</span><span class="frow__value">Любой</span></span>
-        <span class="frow__arrow" aria-hidden="true">›</span>
+        <span class="frow__text"><span class="frow__name">Проходной балл</span><span class="frow__value">Любой</span></span><span class="frow__arrow" aria-hidden="true">›</span>
       </button>
       <div class="fsheet__checks">
         <button type="button" class="fcheck" id="mBudget" aria-pressed="false"><span class="fcheck__box" aria-hidden="true"></span>Только бюджет</button>
@@ -218,7 +204,7 @@
   <div class="popover" id="popover" role="dialog" aria-modal="false" aria-labelledby="popTitle" hidden>
     <div class="popover__head">
       <b id="popTitle"></b>
-      <button type="button" class="icon-btn" id="popClose" aria-label="Закрыть">✕</button>
+      <button type="button" class="icon-btn" id="popClose" aria-label="Закрыть"><i data-icon="x"></i></button>
     </div>
     <div class="popover__body" id="popBody"></div>
   </div>
@@ -227,14 +213,14 @@
   <section class="container section" id="about-data" aria-labelledby="aboutTitle">
     <div class="about">
       <div>
-        <h2 class="section__title section__title--left" id="aboutTitle">О данных</h2>
-        <p>Проходные баллы собраны с сайта <a href="https://tabiturient.ru/" target="_blank" rel="noopener noreferrer">Табитуриент</a> и показаны за прошлый год. В этом году проходной может быть другим. Перед подачей документов проверь правила приёма на сайте вуза.</p>
+        <h2 id="aboutTitle">О данных</h2>
+        <p>Проходные баллы собраны с сайта <a href="https://tabiturient.ru/" target="_blank" rel="noopener noreferrer">Табитуриент</a> и показаны за последний год, по которому они опубликованы (см. «Год баллов»). В новом году проходной может быть другим. Перед подачей документов проверь правила приёма на сайте вуза.</p>
         <ul class="about__list">
-          <li>«Один из» — группа предметов по выбору: нужен любой один из них.</li>
-          <li>«+ Внутренний экзамен вуза» — вуз проводит свой экзамен, и проходной балл включает его.</li>
-          <li>Проходной указан на бюджет. «Только платно» и «Только БВИ» значат, что по общему конкурсу на бюджет не принимали.</li>
+          <li>«Физика или Информатика» — нужен любой один из этих предметов.</li>
+          <li>«+ экзамен вуза» — вуз проводит свой экзамен, и проходной балл включает его.</li>
+          <li>Проходной указан на бюджет. «Только платно» значит, что бюджетных мест нет. «Только БВИ» — все бюджетные места заняли поступающие без вступительных испытаний (победители олимпиад), по общему конкурсу на бюджет не принимали.</li>
           <li>Цена платного — стоимость одного года обучения по этой форме. Проходных баллов на платное вузы не публикуют: туда берут с баллами не ниже минимальных.</li>
-          <li>Базовую математику вузы не принимают. Если сдаёшь базу, мы покажем программы, где математика не нужна.</li>
+          <li>Базовую математику вузы не принимают. Если сдаёшь базу, покажем программы, где математика не нужна.</li>
         </ul>
       </div>
       <dl class="about__meta" id="dataInfo"></dl>
@@ -243,41 +229,41 @@
 
   <footer class="footer">
     <div class="container footer__inner">
-      <span>🎓 UniMatch — прототип</span>
       <span class="muted">Данные: tabiturient.ru. Сервис не связан с Табитуриентом и вузами.</span>
     </div>
   </footer>
 
   <dialog class="premium" id="premiumDialog" aria-labelledby="premiumTitle">
-    <button type="button" class="icon-btn premium__close" data-close aria-label="Закрыть">✕</button>
+    <button type="button" class="icon-btn premium__close" data-close aria-label="Закрыть"><i data-icon="x"></i></button>
     <div class="premium__head">
-      <span class="premium__badge">✨ Премиум</span>
+      <span class="premium__badge">Премиум</span>
       <h2 id="premiumTitle">Поступи туда, куда мечтаешь</h2>
       <p>Всё, чтобы пройти приёмную кампанию спокойно и с планом.</p>
     </div>
     <ul class="perks">
-      <li><span class="perk__icon">🎯</span><div><b>Стратегия подачи</b><span>Соберём твою пятёрку вузов: мечта, реальные варианты и надёжный запасной.</span></div></li>
-      <li><span class="perk__icon">📈</span><div><b>Прогноз шансов</b><span>Покажем вероятность поступления на каждую программу с учётом твоих баллов.</span></div></li>
-      <li><span class="perk__icon">🔔</span><div><b>Уведомления в Telegram</b><span>Напомним о дедлайнах и сообщим, если изменились проходные или списки.</span></div></li>
-            <li><span class="perk__icon">📄</span><div><b>Подборка в PDF</b><span>Красивый отчёт, который удобно показать родителям.</span></div></li>
-      <li><span class="perk__icon">💬</span><div><b>Приоритетная поддержка</b><span>Ответим на вопросы о поступлении быстрее всех.</span></div></li>
+      <li><b>ИИ-помощник <small>скоро</small></b><span>Напиши обычными словами: «хочу в айти в Питере, у меня 230 баллов». Он сам выставит фильтры и подскажет, куда подать.</span></li>
+      <li><b>Подборка в PDF</b><span>Избранное и сравнение одним аккуратным файлом, который удобно показать родителям.</span></li>
+      <li><b>Приоритетная поддержка</b><span>Ответим на вопросы о сайте и подборе быстрее всех.</span></li>
+      <li><b>Сравнение до 10 программ</b><span>Вместо 4 в бесплатной версии.</span></li>
+      <li><b>Заметки к программам</b><span>Запиши своё: «был на дне открытых дверей, понравилось».</span></li>
+      <li><b>Ранний доступ</b><span>Новые функции сначала появляются у тебя.</span></li>
     </ul>
     <table class="plan-table">
       <thead><tr><th scope="col"></th><th scope="col">Бесплатно</th><th scope="col">Премиум</th></tr></thead>
       <tbody>
         <tr><th scope="row">Подбор, фильтры, поиск</th><td>✓</td><td>✓</td></tr>
         <tr><th scope="row">Проходные баллы и цены</th><td>✓</td><td>✓</td></tr>
-        <tr><th scope="row">Избранное и сравнение</th><td>✓</td><td>✓</td></tr>
-        <tr><th scope="row">Стратегия 5 заявлений</th><td>—</td><td>✓</td></tr>
-        <tr><th scope="row">Прогноз шансов на 2026</th><td>—</td><td>✓</td></tr>
-        <tr><th scope="row">Telegram и PDF</th><td>—</td><td>✓</td></tr>
+        <tr><th scope="row">Избранное</th><td>✓</td><td>✓</td></tr>
+        <tr><th scope="row">Сравнение программ</th><td>до 4</td><td>до 10</td></tr>
+        <tr><th scope="row">ИИ-помощник</th><td>—</td><td>✓</td></tr>
+        <tr><th scope="row">PDF, заметки, поддержка</th><td>—</td><td>✓</td></tr>
       </tbody>
     </table>
     <div class="premium__price">
       <div><span class="price">399 ₽</span><span class="price__note">разово, на весь сезон поступления</span></div>
       <button type="button" class="btn btn--primary btn--lg" id="premiumBuy">Оформить за 399 ₽</button>
     </div>
-    <p class="premium__thanks" id="premiumThanks" hidden>Спасибо за интерес! 🙌 Оплата появится совсем скоро, а пока весь подбор бесплатный.</p>
+    <p class="premium__thanks" id="premiumThanks" hidden>Спасибо за интерес! Оплата появится совсем скоро, а пока весь подбор бесплатный.</p>
     <p class="premium__foot">Базовый подбор вузов останется бесплатным навсегда.</p>
   </dialog>
 </body>

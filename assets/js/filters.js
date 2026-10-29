@@ -1,8 +1,17 @@
 // Чистая логика подбора: без DOM, чтобы её можно было тестировать отдельно (tests/filters.test.html).
+import { REGION_ALIASES } from './catalog.js';
 
 export const MIN_SUBJECTS = 3;
 // Русский и математика обязательны для аттестата, поэтому отмечены всегда.
 export const LOCKED_SUBJECTS = ['rus', 'math'];
+// Иностранные языки: на сайте это одна плашка с выбором языка.
+export const LANGS = ['eng', 'ger', 'fra', 'spa', 'chi'];
+
+/** Есть ли хоть один балл по отмеченным предметам: тогда считаем шансы. Отдельного переключателя нет. */
+export function hasMyScores(state) {
+  const selected = effectiveSubjects(state);
+  return Object.entries(state.myScores).some(([id, v]) => v != null && selected.has(id));
+}
 
 /**
  * Предметы, которые засчитывают вузы. Базовую математику вузы не принимают:
@@ -41,7 +50,8 @@ export function buildIndex(data) {
       trend: trend(p),
       // Максимум суммы: по 100 за каждый экзамен, включая обязательные испытания вуза.
       maxScore: 100 * (p.req.length + p.choice.length + p.extra.filter((e) => !e.endsWith('(по выбору)')).length),
-      haystack: normalizeText([p.name, p.code, p.profile, p.faculty, uni?.name, uni?.fullName, uni?.cityName].join(' ')),
+      // В поиск попадают и города региона: «казань» находит программы Татарстана.
+      haystack: normalizeText([p.name, p.code, p.profile, p.faculty, uni?.name, uni?.fullName, uni?.cityName, REGION_ALIASES[uni?.cityName]].join(' ')),
       uniKey: normalizeText([uni?.name, uni?.fullName].join(' ')),
     };
   });
@@ -100,6 +110,19 @@ export function myTotal(program, selected, myScores) {
   return total;
 }
 
+/**
+ * Можно ли сравнивать сумму ЕГЭ с проходным. Нельзя, если в проходной входит экзамен вуза:
+ * отметка «+д» на Табитуриенте или балл выше максимума по одним ЕГЭ (371 при трёх экзаменах).
+ */
+export function comparable(p) {
+  return p.score != null && !p.dvi && p.score <= 100 * (p.req.length + p.choice.length);
+}
+
+/** Запас (или нехватка) твоих баллов относительно проходного; null, если сравнивать нельзя. */
+export function marginFor(p, mine) {
+  return mine != null && comparable(p) ? mine - p.score : null;
+}
+
 export function hasScoreFilter(state, bounds) {
   return (state.min != null && state.min > bounds.min) || (state.max != null && state.max < bounds.max);
 }
@@ -109,6 +132,7 @@ export function matchesBaseFilters(p, state, bounds) {
   if (state.city && p.cityId !== state.city) return false;
   if (state.uni && p.uni !== state.uni) return false;
   if (state.dir && p.dirKey !== state.dir) return false;
+  if (state.areas?.size && !state.areas.has(p.area)) return false;
   if (state.forms.size && !state.forms.has(p.form)) return false;
   if (state.levels.size && !state.levels.has(p.level)) return false;
   if (p.score == null) {
@@ -141,7 +165,7 @@ export function computeResults(index, state) {
     if (isEligible(p, selected)) {
       if (!ready) continue;
       const mine = state.showScores ? myTotal(p, selected, state.myScores) : null;
-      const margin = mine != null && p.score != null ? mine - p.score : null;
+      const margin = marginFor(p, mine);
       if (state.fits && !(margin != null && margin >= 0)) continue;
       items.push({ p, mine, margin });
     } else if (showUnlock) {
@@ -180,6 +204,41 @@ export const SORT_SHORT = {
 export function sortItems(items, key) {
   const primary = SORTERS[key] ?? SORTERS['score-desc'];
   return items.sort((a, b) => primary(a, b) || collator.compare(a.p.name, b.p.name) || a.p.id - b.p.id);
+}
+
+/**
+ * Режим «Вузы»: те же найденные программы, сгруппированные по вузу.
+ * У группы — число программ, разброс проходных, самая низкая цена и сколько программ проходят по твоим баллам.
+ */
+export function groupByUni(items, key) {
+  const groups = new Map();
+  for (const item of items) {
+    const { p } = item;
+    let g = groups.get(p.uni);
+    if (!g) {
+      g = { uni: p.uniObj, uniId: p.uni, items: [], minScore: null, maxScore: null, minCost: null, fits: 0, bestMargin: null };
+      groups.set(p.uni, g);
+    }
+    g.items.push(item);
+    if (p.score != null) {
+      g.minScore = g.minScore == null ? p.score : Math.min(g.minScore, p.score);
+      g.maxScore = g.maxScore == null ? p.score : Math.max(g.maxScore, p.score);
+    }
+    if (p.cost) g.minCost = g.minCost == null ? p.cost : Math.min(g.minCost, p.cost);
+    if (item.margin != null) {
+      if (item.margin >= 0) g.fits += 1;
+      g.bestMargin = g.bestMargin == null ? item.margin : Math.max(g.bestMargin, item.margin);
+    }
+  }
+  const byName = (a, b) => collator.compare(a.uni?.name ?? '', b.uni?.name ?? '');
+  const order = {
+    'score-asc': (a, b) => nullsLast(a.minScore, b.minScore, (x, y) => x - y),
+    'margin-desc': (a, b) => b.fits - a.fits || nullsLast(a.bestMargin, b.bestMargin, (x, y) => y - x),
+    'cost-asc': (a, b) => nullsLast(a.minCost, b.minCost, (x, y) => x - y),
+    name: byName,
+    uni: byName,
+  }[key] ?? ((a, b) => nullsLast(a.maxScore, b.maxScore, (x, y) => y - x));
+  return [...groups.values()].sort((a, b) => order(a, b) || b.items.length - a.items.length || byName(a, b));
 }
 
 function nullsLast(a, b, cmp) {
