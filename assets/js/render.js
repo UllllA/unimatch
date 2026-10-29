@@ -78,7 +78,7 @@ export function mountSubjects(container, index) {
   container.innerHTML = `
     <p class="subjects__label">Обязательные</p>
     <div class="subjects__grid subjects__grid--req">${required.join('')}</div>
-    <p class="subjects__label">По выбору <span>отметь хотя бы один</span></p>
+    <p class="subjects__label">По выбору</p>
     <div class="subjects__grid">${optional.join('')}</div>`;
 }
 

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>UniMatch — подбор вуза по предметам ЕГЭ</title>
   <meta name="description" content="Отметь предметы ЕГЭ и впиши баллы: покажем направления и вузы, куда с ними берут, проходные баллы на бюджет, цены платного и твои шансы.">
-  <meta name="theme-color" content="#fbfaf5">
+  <meta name="theme-color" content="#eceff6">
   <!-- превью ссылки в Telegram и ВК: кнопка «Поделиться» отправляет именно её -->
   <meta property="og:type" content="website">
   <meta property="og:locale" content="ru_RU">
@@ -44,26 +44,44 @@
   </header>
 
   <main id="tool">
+    <div class="hero">
     <section class="container intro">
       <h1>Куда поступить <mark class="hl">с&nbsp;твоими ЕГЭ</mark></h1>
-      <p class="intro__sub">Отметь предметы, которые сдаёшь, и впиши баллы. Покажем направления и вузы, куда с ними берут, проходные на бюджет, цены платного и твои шансы.</p>
-      <p class="intro__meta" id="heroStats" aria-live="polite"></p>
+      <p class="intro__sub">Отметь предметы и баллы — покажем, куда проходишь на бюджет и сколько стоит платное.</p>
       <form class="ask" id="askForm" aria-label="ИИ-помощник">
-        <label class="ask__label" for="askInput"><i data-icon="sparkle"></i>Или опиши словами, что ищешь <span class="ask__badge">ИИ · бета</span></label>
+        <label class="sr-only" for="askInput">Опиши словами, что ищешь</label>
         <div class="ask__row">
+          <span class="ask__badge ask__badge-in">ИИ · бета</span>
+          <span class="ask__icon"><i data-icon="sparkle"></i></span>
           <input type="text" id="askInput" maxlength="300" autocomplete="off" enterkeyhint="search"
-            placeholder="Например: хочу в айти в Питере, 230 баллов, только бюджет">
+            placeholder="Опиши словами, что ищешь">
           <button type="submit" class="btn btn--primary">Подобрать</button>
         </div>
         <div class="ask__examples">
-          <span>Попробуй:</span>
+          <span>или попробуй:</span>
           <button type="button" class="chip" data-example="Информатика, хочу в айти в Питере, 230 баллов, только бюджет">айти в Питере</button>
           <button type="button" class="chip" data-example="Химия и биология, хочу стать врачом в Казани">врач в Казани</button>
           <button type="button" class="chip" data-example="Русский 85, обществознание 80, история 75, математика база, хочу на юриста в Москве">юрист в Москве</button>
         </div>
         <div class="ask__reply" id="askReply" aria-live="polite" hidden></div>
       </form>
+      <p class="intro__meta" id="heroStats" aria-live="polite"></p>
+      <aside class="promo" aria-labelledby="promoTitle">
+        <div class="promo__head">
+          <span class="premium__badge">Премиум</span>
+          <span class="promo__price"><b>399 ₽</b> на весь сезон</span>
+        </div>
+        <p class="promo__title" id="promoTitle">Поступи туда, куда мечтаешь</p>
+        <ul class="promo__list">
+          <li><b>ИИ-помощник</b> подскажет, куда подать</li>
+          <li><b>Подборка в PDF</b> — показать родителям</li>
+          <li><b>Сравнение до 10</b> программ вместо 4</li>
+          <li><b>Заметки</b>, приоритетная поддержка, ранний доступ</li>
+        </ul>
+        <button type="button" class="btn btn--block promo__btn" id="promoMore">Подробнее о Премиуме</button>
+      </aside>
     </section>
+    </div>
 
     <div class="container">
       <div class="demo-banner" id="demoBanner" role="note" hidden>
@@ -87,7 +105,7 @@
       <section class="panel" aria-labelledby="subjectsTitle">
         <div class="panel__head">
           <div>
-            <h2 id="subjectsTitle">Какие ЕГЭ ты сдаёшь?</h2>
+            <h2 id="subjectsTitle">Твои ЕГЭ</h2>
             <p class="muted" id="subjectsHint" aria-live="polite"></p>
           </div>
           <button type="button" class="btn btn--ghost btn--sm" id="resetSubjects">Сбросить</button>

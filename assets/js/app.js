@@ -285,6 +285,7 @@ function bindEvents() {
   }
 
   el.premiumBtn.addEventListener('click', openPremium);
+  $('promoMore').addEventListener('click', openPremium);
   el.premium.addEventListener('click', (e) => {
     if (e.target === el.premium || e.target.closest('[data-close]')) el.premium.close();
   });

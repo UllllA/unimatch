@@ -3,13 +3,13 @@
 
 :root {
   color-scheme: light;
-  --bg: #fbfaf5;
-  --grid: #e8ebf4;              /* клетка тетради */
+  --bg: #eceff6;                /* фон темнее плашек, чтобы белые карточки читались */
+  --grid: #dfe4ef;              /* клетка тетради — только на первом экране */
   --surface: #ffffff;
-  --surface-2: #f3f5fa;
-  --surface-3: #e7ebf4;
-  --border: #dde2ee;
-  --border-strong: #c3cadb;
+  --surface-2: #f2f4f9;
+  --surface-3: #e5e9f2;
+  --border: #d3d9e6;
+  --border-strong: #b9c1d4;
   --text: #1e2233;
   --text-strong: #12152a;
   --muted: #5c6279;
@@ -30,7 +30,7 @@
   /* pen, ok и warn — с контрастом не ниже 4.5:1 на всех светлых фонах (WCAG AA для мелкого текста) */
   --bar-bg: #1e2547;           /* тёмные плашки: сравнение, уведомления */
   --bar-text: #ffffff;
-  --shadow-sm: 0 1px 2px rgba(18, 21, 42, 0.06);
+  --shadow-sm: 0 1px 2px rgba(18, 21, 42, 0.06), 0 2px 8px -4px rgba(18, 21, 42, 0.12);
   --shadow-md: 0 8px 22px -12px rgba(18, 21, 42, 0.28);
   --shadow-lg: 0 20px 50px -18px rgba(18, 21, 42, 0.45);
   --radius: 10px;
@@ -41,12 +41,12 @@
 /* Тёмная тема — «ночная тетрадь»: включается переключателем в шапке (html[data-theme="dark"]). */
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --bg: #12162a;
-  --grid: #191e36;
-  --surface: #191e36;
-  --surface-2: #20263f;
-  --surface-3: #29304d;
-  --border: #2b3254;
+  --bg: #0d1022;
+  --grid: #161b33;
+  --surface: #1b2140;
+  --surface-2: #232a4a;
+  --surface-3: #2c3457;
+  --border: #2f3760;
   --border-strong: #3d4569;
   --text: #e3e6f2;
   --text-strong: #ffffff;
@@ -82,13 +82,7 @@ body {
 }
 /* Клетка тетради: одна сетка на весь экран, по центру и неподвижная. Шапка и панель фильтров рисуют ту же сетку,
    поэтому линии под ними продолжаются ровно, а по краям экрана клетки обрезаны одинаково. */
-body, .topbar, .fbar, .footer {
-  background-color: var(--bg);
-  background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
-  background-size: 24px 24px;
-  background-position: center top;
-  background-attachment: fixed;
-}
+body, .fbar { background-color: var(--bg); }
 body.pop-open, body.sheet-open { overflow: hidden; }
 h1, h2, h3 { margin: 0; color: var(--text-strong); line-height: 1.15; font-weight: 800; letter-spacing: -0.02em; }
 h2 { font-size: 1.3rem; }
@@ -135,6 +129,8 @@ mark { background: var(--marker); color: var(--marker-text); padding: 0 0.2em; b
 /* ---------- шапка ---------- */
 .topbar {
   position: sticky; top: 0; z-index: 40; height: var(--topbar-h);
+  background: color-mix(in srgb, var(--surface) 92%, transparent); border-bottom: 1px solid var(--border);
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
 }
 .topbar__inner { height: 100%; display: flex; align-items: center; gap: 0.75rem; }
 .logo { display: inline-flex; align-items: center; gap: 0.5rem; font-weight: 800; font-size: 1.15rem; color: var(--text-strong); text-decoration: none; letter-spacing: -0.02em; }
@@ -162,8 +158,9 @@ mark { background: var(--marker); color: var(--marker-text); padding: 0 0.2em; b
 .theme[aria-checked='false'] .theme__opt:first-child, .theme[aria-checked='true'] .theme__opt:last-child { color: var(--text-strong); }
 
 /* ---------- первый экран ---------- */
-.intro { padding-top: 2rem; padding-bottom: 1.1rem; }
-.intro h1 { font-size: clamp(1.85rem, 4.4vw, 2.9rem); max-width: 20ch; }
+main { position: relative; isolation: isolate; }
+.intro { padding-top: 2.4rem; padding-bottom: 1.6rem; }
+.intro h1 { font-size: clamp(1.85rem, 4.4vw, 2.9rem); }
 /* жёлтый маркер по нижней половине строки */
 .hl {
   background: linear-gradient(transparent 52%, var(--marker) 52%, var(--marker) 90%, transparent 90%);
@@ -171,21 +168,27 @@ mark { background: var(--marker); color: var(--marker-text); padding: 0 0.2em; b
 }
 /* на тёмном фоне заливка маркером мутнеет — оставляем чистую жёлтую черту под словами */
 :root[data-theme='dark'] .hl { background: linear-gradient(transparent 82%, var(--marker) 82%, var(--marker) 94%, transparent 94%); }
-.intro__sub { margin-top: 0.7rem; max-width: 640px; font-size: 1.04rem; color: var(--muted); }
-.intro__meta { margin-top: 0.55rem; font-size: 0.86rem; color: var(--muted); min-height: 1.3em; }
+.intro__sub { margin-top: 0.6rem; max-width: 760px; font-size: 1.06rem; color: var(--muted); }
+.intro__meta { margin-top: 0.9rem; font-size: 0.86rem; color: var(--muted); min-height: 1.3em; }
 .intro__meta b { color: var(--text-strong); font-variant-numeric: tabular-nums; }
 
 /* ИИ-помощник: одна строка «опиши словами» под заголовком */
-.ask { margin-top: 1rem; max-width: 760px; padding: 0.85rem 1rem 0.9rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow-sm); }
-.ask__label { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; font-weight: 700; color: var(--text-strong); margin-bottom: 0.55rem; }
-.ask__label .ico { color: var(--ink); }
+.ask { margin-top: 1.3rem; max-width: 720px; }
+.ask__row {
+  position: relative; display: flex; align-items: center; gap: 0.4rem; padding: 0.35rem 0.35rem 0.35rem 0.9rem;
+  border: 1.5px solid var(--border-strong); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow-md);
+}
+.ask__row:focus-within { border-color: var(--ink); box-shadow: 0 0 0 4px var(--ink-soft), var(--shadow-md); }
+.ask__icon { color: var(--ink); }
+.ask__badge-in { position: absolute; top: -0.65rem; left: 0.9rem; }
 .ask__badge { white-space: nowrap; padding: 0.05rem 0.45rem; border-radius: 999px; background: var(--marker); color: var(--marker-text); font-size: 0.72rem; font-weight: 700; }
-.ask__row { display: flex; gap: 0.5rem; }
-.ask__row input { flex: 1; min-width: 0; padding: 0.6rem 0.8rem; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); }
-.ask__row input:focus { outline: 2px solid var(--ink); outline-offset: 1px; border-color: var(--ink); }
+.ask__row input { flex: 1; min-width: 0; height: 44px; padding: 0 0.2rem; font: inherit; font-size: 1.02rem; color: var(--text); background: transparent; border: 0; outline: none; }
+.ask__row .btn { min-height: 44px; }
 .ask.is-busy .ask__row input { opacity: 0.7; }
-.ask__examples { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; margin-top: 0.55rem; font-size: 0.85rem; color: var(--muted); }
-.ask__reply { margin-top: 0.7rem; padding-top: 0.65rem; border-top: 1px dashed var(--border-strong); font-size: 0.93rem; }
+.ask__examples { display: flex; flex-wrap: wrap; align-items: center; gap: 0.15rem 0.3rem; margin-top: 0.6rem; font-size: 0.86rem; color: var(--muted); }
+.ask__examples .chip { min-height: 0; padding: 0.1rem 0.15rem; border: 0; background: none; font-size: inherit; font-weight: 600; color: var(--ink-text); text-decoration: underline dotted; text-underline-offset: 3px; }
+.ask__examples .chip:hover { text-decoration-style: solid; }
+.ask__reply { margin-top: 0.7rem; padding: 0.75rem 0.9rem; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--border); font-size: 0.93rem; }
 .ask__reply p { margin: 0; }
 .ask__note { display: block; margin-top: 0.3rem; color: var(--muted); }
 .ask__actions { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.55rem; }
@@ -197,7 +200,7 @@ mark { background: var(--marker); color: var(--marker-text); padding: 0 0.2em; b
 .noscript { margin: 1rem; }
 
 /* ---------- как пользоваться: три шага, отмечаются по ходу ---------- */
-.stepper { list-style: none; margin: 0 0 0.75rem; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.5rem; }
+.stepper { display: none !important; list-style: none; margin: 0 0 0.75rem; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.5rem; }
 .stepper button {
   width: 100%; height: 100%; display: flex; align-items: center; gap: 0.65rem; padding: 0.6rem 0.8rem;
   border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); text-align: left; cursor: pointer;
@@ -228,7 +231,7 @@ mark { background: var(--marker); color: var(--marker-text); padding: 0 0.2em; b
 .subject {
   position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'toggle score' 'extra extra';
   align-items: center; column-gap: 0.35rem; padding: 0.3rem 0.4rem 0.3rem 0.25rem;
-  border: 1.5px solid var(--border); border-radius: var(--radius); background: var(--surface);
+  border: 1.5px solid transparent; border-radius: var(--radius); background: var(--surface-2);
   transition: border-color 0.15s, background-color 0.15s;
 }
 .subject:hover { border-color: var(--border-strong); }
@@ -259,7 +262,8 @@ mark { background: var(--marker); color: var(--marker-text); padding: 0 0.2em; b
 }
 .subject__score::placeholder { color: var(--muted); font-weight: 500; font-size: 0.8rem; }
 .subject__score:focus { outline: none; border-color: var(--ink); box-shadow: 0 0 0 3px var(--ink-soft); }
-.subject:not(.is-selected) .subject__score { border-style: dashed; background: transparent; }
+.subject:not(.is-selected) .subject__score { border-color: transparent; background: transparent; }
+.subject:not(.is-selected):hover .subject__score, .subject:not(.is-selected) .subject__score:focus { border-color: var(--border-strong); border-style: dashed; }
 .seg, .subject__lang { grid-area: extra; margin: 0.1rem 0.25rem 0.3rem 2.15rem; }
 .seg { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; max-width: 220px; padding: 2px; border-radius: var(--radius-sm); background: var(--surface-3); }
 .seg__btn { height: 26px; border: 0; border-radius: 5px; background: transparent; font-size: 0.78rem; font-weight: 700; color: var(--muted); cursor: pointer; }
@@ -269,7 +273,7 @@ mark { background: var(--marker); color: var(--marker-text); padding: 0 0.2em; b
   background: var(--surface); font-size: 0.84rem; font-weight: 600; cursor: pointer;
 }
 /* «+N программ»: сколько добавит предмет — пометка зелёной ручкой под названием */
-.subject__badge { margin-top: 0.1rem; font-size: 0.74rem; font-weight: 700; color: var(--ok); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.subject__badge { margin-top: 0.1rem; font-size: 0.74rem; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .subject__badge:empty { display: none; }
 
 /* ---------- результаты ---------- */
@@ -448,7 +452,7 @@ mark { background: var(--marker); color: var(--marker-text); padding: 0 0.2em; b
 .score__label { margin-top: 0.2rem; font-size: 0.68rem; font-weight: 600; color: var(--muted); white-space: nowrap; }
 .score--none .score__value { color: var(--muted); }
 .card__title { font-size: 1.02rem; line-height: 1.25; overflow-wrap: anywhere; }
-.card__profile { margin-top: -0.25rem; font-size: 0.84rem; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.card__profile { margin-top: -0.25rem; font-size: 0.84rem; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
 .card__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0.2rem 0.4rem; font-size: 0.8rem; color: var(--muted); }
 .card__code { font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
 .flag { padding: 0.05rem 0.45rem; border: 1px solid var(--border-strong); border-radius: 5px; font-size: 0.72rem; font-weight: 600; color: var(--muted); }
@@ -473,7 +477,8 @@ mark { background: var(--marker); color: var(--marker-text); padding: 0 0.2em; b
 .chance--none { padding: 0; background: none; font-size: 0.8rem; color: var(--muted); }
 .card__money { font-size: 0.86rem; color: var(--muted); }
 .card__money b { color: var(--text-strong); font-variant-numeric: tabular-nums; }
-.card__faculty { font-size: 0.78rem; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+/* факультет есть на сайте вуза; в карточке он только добавлял строку */
+.card__faculty { display: none !important; font-size: 0.78rem; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 /* низ карточки отделён пунктиром, как линия в тетради */
 .card__foot {
   display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem;
@@ -565,7 +570,7 @@ mark { background: var(--marker); color: var(--marker-text); padding: 0 0.2em; b
 }
 .about__meta dt { color: var(--muted); }
 .about__meta dd { margin: 0; font-weight: 700; overflow-wrap: anywhere; }
-.footer { margin-top: 3.5rem; padding: 1.8rem 0 2.2rem; font-size: 0.9rem; }
+.footer { margin-top: 3.5rem; padding: 1.8rem 0 2.2rem; font-size: 0.9rem; border-top: 1px solid var(--border); background: var(--surface); }
 .footer__inner { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.5rem 1.5rem; }
 
 /* ---------- сравнение, избранное, уведомления ---------- */
@@ -704,3 +709,113 @@ body.has-cmpbar .footer { padding-bottom: 6rem; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
 }
+
+/* ==========================================================================
+   Вариант «Приложение»: тёмная шапка с заголовком и ИИ-строкой, ниже — два столбца:
+   слева закреплены «Твои ЕГЭ», справа сразу фильтры и программы.
+   ========================================================================== */
+:root { --hero-bg: #1e2547; --hero-grid: rgba(255, 255, 255, 0.045); --hero-text: #ffffff; --hero-muted: #b9c0df; }
+:root[data-theme='dark'] { --hero-bg: #161b38; --hero-grid: rgba(255, 255, 255, 0.035); }
+
+/* шапка сливается с тёмным первым экраном */
+.topbar { background: var(--hero-bg); border-bottom: 1px solid rgba(255, 255, 255, 0.08); -webkit-backdrop-filter: none; backdrop-filter: none; }
+.topbar .logo, .topbar .logo b { color: #ffffff; }
+.topbar .logo b { color: var(--marker); }
+.topbar__nav a { color: var(--hero-muted); }
+.topbar__nav a:hover { color: #ffffff; }
+.topbar .theme { background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.16); }
+.topbar .theme::before { background: rgba(255, 255, 255, 0.18); box-shadow: none; }
+.topbar .theme__opt { color: var(--hero-muted); }
+.topbar .theme[aria-checked='false'] .theme__opt:first-child, .topbar .theme[aria-checked='true'] .theme__opt:last-child { color: #ffffff; }
+.topbar .btn--ghost { border-color: rgba(255, 255, 255, 0.22); color: #ffffff; }
+.topbar .btn--ghost:hover { background: rgba(255, 255, 255, 0.08); }
+.topbar__fav .ico { color: #ff8f88; }
+#premiumBtn { background: var(--marker); border-color: var(--marker); color: var(--marker-text); }
+#premiumBtn:hover { background: #ffd92e; }
+
+.hero {
+  background-color: var(--hero-bg);
+  background-image: linear-gradient(var(--hero-grid) 1px, transparent 1px), linear-gradient(90deg, var(--hero-grid) 1px, transparent 1px);
+  background-size: 24px 24px; background-position: center top;
+  color: var(--hero-text);
+}
+.hero .intro { padding-top: 2.6rem; padding-bottom: 2.4rem; }
+.hero h1 { color: #ffffff; font-size: clamp(2rem, 5vw, 3.4rem); }
+/* «с твоими ЕГЭ» — жёлтая наклейка, чуть наискосок */
+.hero .hl, :root[data-theme='dark'] .hero .hl {
+  display: inline-block; padding: 0 0.22em 0.04em; border-radius: 8px; background: var(--marker); color: #1e2547;
+  transform: rotate(-1.5deg); box-shadow: 0 6px 0 rgba(0, 0, 0, 0.18);
+}
+.hero .intro__sub { color: var(--hero-muted); }
+.hero .intro__meta { color: var(--hero-muted); }
+.hero .intro__meta b { color: #ffffff; }
+.hero .ask__row { border-color: transparent; background: #ffffff; box-shadow: 0 18px 40px -16px rgba(0, 0, 0, 0.6); }
+.hero .ask__row input { color: #1e2233; }
+.hero .ask__row input::placeholder { color: #6b7190; }
+.hero .ask__row:focus-within { box-shadow: 0 0 0 4px rgba(255, 228, 92, 0.55), 0 18px 40px -16px rgba(0, 0, 0, 0.6); }
+.hero .ask__icon { color: #2f4bb3; }
+.hero .ask__row .btn--primary { background: #2f4bb3; color: #ffffff; }
+.hero .ask__examples { color: var(--hero-muted); }
+.hero .ask__examples .chip { color: var(--marker); }
+.hero .ask__reply { color: var(--text); }
+
+/* два столбца */
+.container.tool { max-width: 1340px; margin-top: 1.5rem; }
+@media (min-width: 1000px) {
+  .tool { display: grid; grid-template-columns: 330px minmax(0, 1fr); gap: 1.5rem; align-items: start; }
+  .tool > .panel {
+    position: sticky; top: calc(var(--topbar-h) + 12px); max-height: calc(100vh - var(--topbar-h) - 24px); max-height: calc(100dvh - var(--topbar-h) - 24px);
+    overflow-y: auto; overscroll-behavior: contain; padding: 1.1rem 1rem 1.2rem; scrollbar-width: thin;
+  }
+  .tool > .results { margin-top: 0; }
+  .fbar { margin: 0 0 0.9rem; padding: 0 0 0.5rem; }
+  .fbar::before { content: ''; position: absolute; inset: -12px 0 0; z-index: -1; background: var(--bg); }
+  .fbar { isolation: isolate; }
+}
+
+/* «Твои ЕГЭ» — компактный список строк вместо сетки плашек */
+.panel__head h2 { font-size: 1.25rem; }
+.panel__head p { font-size: 0.84rem; }
+.tool .subjects__grid, .tool .subjects__grid--req { grid-template-columns: 1fr; gap: 0.3rem; }
+@media (min-width: 560px) and (max-width: 999px) { .tool .subjects__grid { grid-template-columns: 1fr 1fr; } }
+.tool .subject { padding: 0.1rem 0.3rem 0.1rem 0.15rem; }
+.tool .subject__toggle { min-height: 38px; }
+.subject__badge { display: inline; margin: 0 0 0 0.35rem; }
+.subject__text { flex-direction: row; flex-wrap: wrap; align-items: baseline; }
+.subject__note { display: none; }
+.tool .subjects__label { margin: 0.9rem 0 0.4rem; }
+
+/* карточки: лёгкая тень вместо рамки */
+.card, .unirow { border-color: transparent; box-shadow: var(--shadow-sm); }
+.card:hover, .unirow:hover { border-color: var(--border-strong); }
+.results__head h2 { font-size: 1.45rem; }
+
+.tool .panel__head { flex-wrap: nowrap; }
+.tool .panel__head > div { flex: 1; min-width: 0; }
+.tool .panel__head .btn--sm { min-height: 30px; padding: 0.2rem 0.6rem; font-size: 0.8rem; }
+
+/* плюсы Премиума справа на тёмном первом экране */
+.promo {
+  margin-top: 1.6rem; max-width: 720px; padding: 1.2rem 1.25rem 1.25rem; border-radius: 16px;
+  background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.14); color: var(--hero-text);
+}
+.promo__head { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
+.promo__price { font-size: 0.86rem; color: var(--hero-muted); white-space: nowrap; }
+.promo__price b { font-size: 1.15rem; color: #ffffff; }
+.promo__title { margin-top: 0.7rem; font-size: 1.15rem; font-weight: 800; letter-spacing: -0.01em; }
+.promo__list { list-style: none; display: grid; gap: 0.45rem; margin: 0.75rem 0 1rem; padding: 0; font-size: 0.9rem; color: var(--hero-muted); }
+.promo__list li { position: relative; padding-left: 1.5rem; }
+.promo__list li::before {
+  content: ''; position: absolute; left: 0.25rem; top: 0.42rem; width: 9px; height: 5px;
+  border-left: 2px solid var(--marker); border-bottom: 2px solid var(--marker); transform: rotate(-45deg);
+}
+.promo__list b { color: #ffffff; }
+.promo__btn { background: var(--marker); color: var(--marker-text); }
+.promo__btn:hover { background: #ffd92e; }
+@media (min-width: 1000px) {
+  .hero .intro { display: grid; grid-template-columns: minmax(0, 1fr) 340px; column-gap: 3rem; align-items: start; }
+  .hero .intro > :not(.promo) { grid-column: 1; }
+  .promo { grid-column: 2; grid-row: 1 / span 5; align-self: center; margin-top: 0; transform: rotate(1deg); }
+}
+/* на телефоне Премиум открывается кнопкой в шапке, а первый экран остаётся коротким */
+@media (max-width: 720px) { .promo { display: none; } }
