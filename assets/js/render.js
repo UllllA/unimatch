@@ -21,6 +21,7 @@ const ICON_PATHS = {
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6 6 6M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4"/>',
   moon: '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>',
   x: '<path d="M6 6l12 12M18 6 6 18"/>',
+  clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
   arrowRight: '<path d="M5 12h14M13 6l6 6-6 6"/>',
   sparkle: '<path d="M12 3.5l1.9 5.1 5.1 1.9-5.1 1.9L12 17.5l-1.9-5.1L5 10.5l5.1-1.9z"/><path d="M19 15.5v4M17 17.5h4"/>',
 };
@@ -107,7 +108,7 @@ export function updateSubjects(container, state, unlock) {
     if (badge) {
       // У математики «+N» — сколько программ откроет профильный уровень вместо базы.
       const n = base ? unlock.get(id) ?? 0 : on ? 0 : unlock.get(id) ?? 0;
-      badge.textContent = n ? `+${n.toLocaleString('ru')} ${base ? 'с профильной' : pluralize(n, 'программа', 'программы', 'программ')}` : '';
+      badge.textContent = n ? `+${n.toLocaleString('ru')}${base ? ' с профильной' : ''}` : '';
       badge.title = n ? `${base ? 'С профильной откроет' : 'Добавит'} ${n} ${pluralize(n, 'программу', 'программы', 'программ')}` : '';
     }
   }
@@ -143,7 +144,9 @@ function renderExams(p, index, selected) {
   const extra = p.extra
     .map((e) => `<span class="exams__extra" title="Вступительное испытание вуза">+ ${esc(e.replace('Внутренний экзамен вуза', 'экзамен вуза'))}</span>`)
     .join(' ');
-  return `<p class="exams"><span class="exams__label">ЕГЭ</span> ${parts.join(', ')}${extra ? ` ${extra}` : ''}</p>`;
+  const list = `${parts.join(', ')}${extra ? ` ${extra}` : ''}`;
+  // title: на большом экране длинный список сокращается до двух строк, полностью он виден при наведении
+  return `<p class="exams" title="${list.replace(/<[^>]+>/g, '')}"><span class="exams__label">ЕГЭ</span> ${list}</p>`;
 }
 
 function renderScore(p) {
@@ -168,8 +171,8 @@ function renderChance(item, state) {
     return `<p class="chance chance--none">${item.p.score == null
       ? `Твоя сумма ${item.mine}, проходного на бюджет нет`
       : item.p.dvi
-        ? `Твои ЕГЭ: ${item.mine}. В проходной входит экзамен вуза, поэтому сравнить нельзя`
-        : `Твои ЕГЭ: ${item.mine}. Проходной ${item.p.score} больше максимума по ЕГЭ: в нём учтены экзамен вуза или дополнительные баллы, поэтому сравнить нельзя`}</p>`;
+        ? `Твои ЕГЭ: ${item.mine}. В проходной входит экзамен вуза, сравнить нельзя`
+        : `Твои ЕГЭ: ${item.mine}. В проходной входят экзамен вуза или доп. баллы, сравнить нельзя`}</p>`;
   }
   const { mine, margin } = item;
   const pass = item.p.score;
@@ -194,7 +197,6 @@ const NOTE_HINTS = {
 /** Стабильный ключ программы (не меняется при пересборке данных) — для избранного и сравнения. */
 export const progKey = (p) => `${p.pid ?? p.id}-${p.form}`;
 
-const safeUrl = (u) => (/^https?:\/\//i.test(u ?? '') ? u : '');
 // Неразрывный пробел перед ₽: знак рубля не переносится на отдельную строку.
 const rub = (n) => `${Math.round(n).toLocaleString('ru')} ₽`;
 const shortCity = (name) => String(name ?? '').split(' и ')[0];
@@ -223,8 +225,6 @@ export function officialProgramUrl(p, uni) {
 export function renderCard(item, index, state, selected) {
   const { p } = item;
   const uni = p.uniObj ?? { id: 0, name: '—', fullName: '' };
-  const site = safeUrl(uni.site);
-  const tabUrl = p.pid ? `https://tabiturient.ru/program/n/?${encodeURIComponent(p.pid)}` : safeUrl(uni.url);
   const key = progKey(p);
   const fav = Boolean(state.favs?.has(key));
   const cmp = Boolean(state.cmp?.has(key));
@@ -243,7 +243,7 @@ export function renderCard(item, index, state, selected) {
       </div>
       ${renderScore(p)}
     </div>
-    <h3 class="card__title">${esc(p.name)}</h3>
+    <h3 class="card__title" title="${esc(p.name)}">${esc(p.name)}</h3>
     ${p.profile ? `<p class="card__profile" title="${esc(p.profile)}">${esc(p.profile)}</p>` : ''}
     <p class="card__meta">${meta}${flags}</p>
     ${renderExams(p, index, selected)}
@@ -251,12 +251,8 @@ export function renderCard(item, index, state, selected) {
     <p class="card__money">${p.cost ? `Платно: <b>${rub(p.cost)}</b> в год` : '<span class="muted">Цена платного не указана</span>'}</p>
     ${p.faculty ? `<p class="card__faculty" title="${esc(p.faculty)}">${esc(p.faculty)}</p>` : ''}
     <div class="card__foot">
-      <div class="card__links">
-        ${site ? `<a class="card__link" href="${esc(site)}" target="_blank" rel="noopener noreferrer">Сайт вуза</a>` : ''}
-        <a class="card__link" href="${esc(officialProgramUrl(p, uni))}" target="_blank" rel="noopener noreferrer"
-          title="Найти страницу программы на ${site ? 'официальном сайте вуза' : 'сайте вуза'} через Яндекс">Найти программу</a>
-        ${tabUrl ? `<a class="card__link card__link--quiet" href="${esc(tabUrl)}" target="_blank" rel="noopener noreferrer" title="Страница программы на Табитуриенте">Табитуриент</a>` : ''}
-      </div>
+      <a class="card__link" href="${esc(officialProgramUrl(p, uni))}" target="_blank" rel="noopener noreferrer"
+        title="Найти страницу программы на сайте вуза через Яндекс">На сайте вуза</a>
       <div class="card__acts">
         <button type="button" class="act act--fav${fav ? ' is-on' : ''}" data-fav="${esc(key)}" aria-pressed="${fav}"
           aria-label="Избранное: ${esc(p.name)}, ${esc(uni.name)}" title="${fav ? 'Убрать из избранного' : 'В избранное'}">${icon('heart')}</button>

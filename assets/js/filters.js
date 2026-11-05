@@ -175,8 +175,11 @@ export function computeResults(index, state) {
   return { ready, items: sortItems(items, state.sort), unlock };
 }
 
+/** 1, если баллов хватает: первыми показываем то, куда человек проходит, а не недостижимые 371. */
+const fitsFirst = (a, b) => Number(b.margin != null && b.margin >= 0) - Number(a.margin != null && a.margin >= 0);
+
 const SORTERS = {
-  'score-desc': (a, b) => nullsLast(a.p.score, b.p.score, (x, y) => y - x),
+  'score-desc': (a, b) => fitsFirst(a, b) || nullsLast(a.p.score, b.p.score, (x, y) => y - x),
   'score-asc': (a, b) => nullsLast(a.p.score, b.p.score, (x, y) => x - y),
   'margin-desc': (a, b) => nullsLast(a.margin, b.margin, (x, y) => y - x),
   'trend-desc': (a, b) => nullsLast(a.p.trend, b.p.trend, (x, y) => y - x),
@@ -195,7 +198,7 @@ export const SORT_OPTIONS = [
   ['uni', 'Вуз А–Я'],
 ];
 
-/** Короткие подписи для кнопки сортировки на телефоне. */
+/** Короткие подписи для кнопки сортировки. */
 export const SORT_SHORT = {
   'score-desc': 'Балл ↓', 'score-asc': 'Балл ↑', 'margin-desc': 'Мой запас', 'trend-desc': 'Рост балла',
   'cost-asc': 'Дешевле', name: 'Направление', uni: 'Вуз А–Я',

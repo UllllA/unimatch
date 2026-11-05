@@ -11,17 +11,16 @@ import { askAssistant, applyPlan, areasLabel } from './assistant.js';
 
 const PAGE_SIZE = 24;
 const OPTIONS_LIMIT = 200;
-const HINT_AT = 6; // после какой карточки показать подсказку про ИИ-помощника (только когда введены баллы)
 const MAX_COMPARE = 4;
 const STORE = {
   fav: 'unimatch:fav', cmp: 'unimatch:cmp', last: 'unimatch:last', theme: 'unimatch:theme', hintOff: 'unimatch:hint-off',
 };
 const $ = (id) => document.getElementById(id);
 const el = {
-  heroStats: $('heroStats'), demoBanner: $('demoBanner'), stepper: $('stepper'),
+  heroStats: $('heroStats'), demoBanner: $('demoBanner'),
   subjects: $('subjectsGrid'), subjectsHint: $('subjectsHint'), resetSubjects: $('resetSubjects'),
-  fbar: $('filterBar'), budget: $('budgetToggle'), fits: $('fitsToggle'), resetFilters: $('resetFilters'),
-  q: $('q'), sort: $('sort'), summary: $('resultsSummary'), views: $('viewSwitch'), share: $('shareBtn'),
+  fbar: $('filterBar'), tools: $('resultsTools'),
+  q: $('q'), summary: $('resultsSummary'), views: $('viewSwitch'), share: $('shareBtn'),
   results: $('results'), list: $('cards'), pager: $('pager'), empty: $('emptyState'), theme: $('themeToggle'),
   pop: $('popover'), popTitle: $('popTitle'), popBody: $('popBody'), popClose: $('popClose'), popBackdrop: $('popBackdrop'),
   sheet: $('filterSheet'), sheetBackdrop: $('fsheetBackdrop'), mFilters: $('mFilters'), mCount: $('mFiltersCount'),
@@ -63,6 +62,11 @@ async function init() {
   state.cmp = loadSet(STORE.cmp);
   setupStatic();
   bindEvents();
+  // Высота закреплённого блока нужна стилям, чтобы под ним ровно помещались два ряда карточек.
+  const bar = document.querySelector('.results__sticky');
+  const setBarHeight = () => document.documentElement.style.setProperty('--bar-h', `${bar.offsetHeight}px`);
+  setBarHeight();
+  new ResizeObserver(setBarHeight).observe(bar);
   update();
 }
 
@@ -75,14 +79,8 @@ function mountIcons(root = document) {
 
 function setupStatic() {
   const { counts, isDemo, generatedAt, source, years } = index.meta;
-  el.heroStats.innerHTML = [
-    [counts.universities, 'вуз', 'вуза', 'вузов'],
-    [counts.programs, 'программа', 'программы', 'программ'],
-    [counts.cities, 'регион', 'региона', 'регионов'],
-  ]
-    .map(([n, ...forms]) => `<b>${n.toLocaleString('ru')}</b> ${pluralize(n, ...forms)}`)
-    .concat(years.length ? [`баллы ${years.join(', ')} года`] : [])
-    .join(' · ');
+  const programs = counts.programs;
+  el.heroStats.innerHTML = `<b>${programs.toLocaleString('ru')} ${pluralize(programs, 'программа', 'программы', 'программ')}</b>${years.length ? ', реальные проходные' : ''}`;
   el.demoBanner.hidden = !isDemo;
 
   const date = generatedAt ? new Date(generatedAt).toLocaleDateString('ru', { day: 'numeric', month: 'long', year: 'numeric' }) : '—';
@@ -99,8 +97,7 @@ function setupStatic() {
 
   mountSubjects(el.subjects, index);
 
-  const sorts = SORT_OPTIONS.filter(([v]) => v !== 'trend-desc' || years.length > 1);
-  el.sort.innerHTML = sorts.map(([v, label]) => `<option value="${v}">${esc(label)}</option>`).join('');
+  lists.sorts = SORT_OPTIONS.filter(([v]) => v !== 'trend-desc' || years.length > 1);
 
   // Справочники для списков с поиском.
   const uniCount = new Map();
@@ -129,29 +126,11 @@ function bindEvents() {
   bindSubjects();
   bindAssistant();
 
-  el.stepper.addEventListener('click', (e) => {
-    const step = e.target.closest('[data-goto]');
-    if (!step) return;
-    if (step.dataset.goto === 'subjects') el.subjects.closest('.panel').scrollIntoView({ block: 'start' });
-    if (step.dataset.goto === 'results') el.results.scrollIntoView({ block: 'start' });
-    if (step.dataset.goto === 'scores') {
-      // Первое пустое поле балла у отмеченного предмета, иначе первое поле вообще.
-      const inputs = [...el.subjects.querySelectorAll('.is-selected .subject__score:not([hidden])')];
-      const target = inputs.find((i) => !i.value) ?? inputs[0];
-      target?.scrollIntoView({ block: 'center' });
-      target?.focus({ preventScroll: true });
-    }
-  });
-
   el.fbar.addEventListener('click', (e) => {
     const pill = e.target.closest('[data-pop]');
     if (pill) togglePop(pill.dataset.pop, pill);
   });
-  el.budget.addEventListener('click', () => { state.budgetOnly = !state.budgetOnly; update(); });
-  el.fits.addEventListener('click', () => { state.fits = !state.fits; update(); });
-  el.resetFilters.addEventListener('click', resetFilters);
   el.q.addEventListener('input', debounce(() => { state.q = el.q.value.trim(); update(); }, 180));
-  el.sort.addEventListener('change', () => { state.sort = el.sort.value; update(); });
   el.views.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-view]');
     if (!btn || btn.dataset.view === state.view) return;
@@ -160,7 +139,7 @@ function bindEvents() {
   });
   el.share.addEventListener('click', shareSelection);
 
-  // Телефон: все фильтры в шторке снизу, включённые — плашками под поиском
+  // Все фильтры в шторке (на компьютере — панель справа), включённые — плашками под поиском
   el.mFilters.addEventListener('click', openSheet);
   $('fsheetClose').addEventListener('click', closeSheet);
   el.sheetBackdrop.addEventListener('click', closeSheet);
@@ -209,18 +188,16 @@ function bindEvents() {
       return;
     }
     if (e.target.closest('[data-premium]')) openPremium();
-    if (e.target.closest('[data-ask]')) focusAssistant();
     if (e.target.closest('[data-dismiss-hint]')) {
       save(STORE.hintOff, '1');
       renderList();
     }
   });
-  // Плашка над списком: «Ты проходишь на N — показать только их?» и обратно.
-  $('fitsBar').addEventListener('click', (e) => {
+  // Ссылка в сводке над списком: «показать только их» и обратно.
+  el.summary.addEventListener('click', (e) => {
     if (!e.target.closest('[data-fits]')) return;
     state.fits = !state.fits;
     update();
-    el.results.scrollIntoView({ block: 'start' });
   });
   el.empty.addEventListener('click', (e) => {
     if (e.target.closest('[data-action="reset-filters"]')) resetFilters();
@@ -285,7 +262,7 @@ function bindEvents() {
   }
 
   el.premiumBtn.addEventListener('click', openPremium);
-  $('promoMore').addEventListener('click', openPremium);
+  $('promoTry').addEventListener('click', openPremium);
   el.premium.addEventListener('click', (e) => {
     if (e.target === el.premium || e.target.closest('[data-close]')) el.premium.close();
   });
@@ -392,14 +369,11 @@ function bindAssistant() {
   el.ask.addEventListener('submit', (e) => {
     e.preventDefault();
     const text = el.askInput.value.trim();
+    // Пустая строка: «Подобрать» всё равно ведёт к подбору, с предметов и баллов.
     if (text) run(text);
+    else el.subjects.closest('.panel').scrollIntoView({ block: 'start' });
   });
   el.ask.addEventListener('click', (e) => {
-    const example = e.target.closest('[data-example]');
-    if (example) {
-      el.askInput.value = example.dataset.example;
-      run(example.dataset.example);
-    }
     if (e.target.closest('[data-ask-show]')) el.results.scrollIntoView({ block: 'start' });
     if (e.target.closest('[data-ask-undo]') && undo) {
       Object.assign(state, undo);
@@ -413,11 +387,6 @@ function bindAssistant() {
 /** Копия подбора без избранного и сравнения: чтобы отменить то, что выставил помощник. */
 function snapshotState() {
   return Object.fromEntries(Object.keys(defaultState()).map((k) => [k, structuredClone(state[k])]));
-}
-
-function focusAssistant() {
-  el.ask.scrollIntoView({ block: 'center' });
-  el.askInput.focus({ preventScroll: true });
 }
 
 /** Отметить предмет; иностранный язык может быть только один. */
@@ -533,8 +502,10 @@ function positionPop() {
   }
   const r = openPop.btn.getBoundingClientRect();
   const width = Math.min(openPop.kind === 'uni' || openPop.kind === 'dir' ? 440 : 360, innerWidth - 32);
-  const left = Math.min(Math.max(16, r.left), innerWidth - width - 16);
-  const top = r.bottom + 8;
+  // Из панели фильтров окно открывается слева от неё, чтобы не закрывать остальные строки.
+  const drawer = !el.sheet.hidden;
+  const left = drawer ? Math.max(16, el.sheet.getBoundingClientRect().left - width - 12) : Math.min(Math.max(16, r.left), innerWidth - width - 16);
+  const top = drawer ? Math.max(16, r.top) : r.bottom + 8;
   el.pop.style.cssText = `left:${left}px; top:${top}px; width:${width}px; max-height:${Math.max(260, innerHeight - top - 16)}px`;
 }
 
@@ -569,11 +540,11 @@ function renderPopBody() {
       fillOptions(list, input.value);
     });
   } else if (kind === 'sort') {
-    // На телефоне вместо обрезанного списка — окно с полными названиями сортировки
-    el.popBody.innerHTML = `<ul class="options" role="listbox" aria-label="Сортировка">${[...el.sort.options].map((o) => `
-      <li><button type="button" class="option${o.value === state.sort ? ' is-selected' : ''}" data-sort="${esc(o.value)}" role="option"
-        aria-selected="${o.value === state.sort}"${o.disabled ? ' disabled' : ''}><span class="option__main">${esc(o.textContent)}
-        ${o.disabled ? '<small>Сначала впиши свои баллы</small>' : ''}</span></button></li>`).join('')}</ul>`;
+    const off = (value) => value === 'margin-desc' && !state.showScores;
+    el.popBody.innerHTML = `<ul class="options" role="listbox" aria-label="Сортировка">${lists.sorts.map(([value, label]) => `
+      <li><button type="button" class="option${value === state.sort ? ' is-selected' : ''}" data-sort="${esc(value)}" role="option"
+        aria-selected="${value === state.sort}"${off(value) ? ' disabled' : ''}><span class="option__main">${esc(label)}
+        ${off(value) ? '<small>Сначала впиши свои баллы</small>' : ''}</span></button></li>`).join('')}</ul>`;
     el.popBody.querySelectorAll('[data-sort]').forEach((b) => b.addEventListener('click', () => {
       state.sort = b.dataset.sort;
       closePop(true);
@@ -755,7 +726,6 @@ function update() {
   updateSubjects(el.subjects, state, results.unlock);
   renderSubjectsHint();
   renderSummary();
-  renderFitsBar();
   renderList();
   writeState(state, index);
   save(STORE.last, location.search);
@@ -768,10 +738,6 @@ function setPill(kind, value, full = value) {
   const row = el.sheet.querySelector(`[data-pop="${kind}"]`);
   row.classList.toggle('is-active', Boolean(value));
   row.querySelector('.frow__value').textContent = full || ANY[kind];
-  const pill = el.fbar.querySelector(`.fpill[data-pop="${kind}"]`);
-  pill.classList.toggle('is-active', Boolean(value));
-  pill.querySelector('.fpill__label').textContent = value || POP_TITLES[kind];
-  pill.title = value ? `${POP_TITLES[kind]}: ${full}` : '';
 }
 
 function syncControls() {
@@ -783,17 +749,12 @@ function syncControls() {
   setPill('form', [...state.forms, ...state.levels].join(', '));
   setPill('score', hasScoreFilter(state, index.scoreBounds)
     ? `${state.min ?? index.scoreBounds.min}–${state.max ?? index.scoreBounds.max}` : '');
-  for (const [btn, on] of [[el.budget, state.budgetOnly], [el.mBudget, state.budgetOnly], [el.fits, state.fits], [el.mFits, state.fits]]) {
+  for (const [btn, on] of [[el.mBudget, state.budgetOnly], [el.mFits, state.fits]]) {
     btn.setAttribute('aria-pressed', String(on));
   }
-  el.fits.hidden = !state.showScores;
   el.mFits.hidden = !state.showScores;
-  el.resetFilters.hidden = !hasActiveFilters();
   renderChips();
   if (el.q.value.trim() !== state.q) el.q.value = state.q;
-  const marginOpt = el.sort.querySelector('[value="margin-desc"]');
-  if (marginOpt) marginOpt.disabled = !state.showScores;
-  el.sort.value = state.sort;
   $('mSortLabel').textContent = SORT_SHORT[state.sort] ?? 'Балл ↓';
   el.views.querySelectorAll('[data-view]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.view === state.view)));
 }
@@ -825,31 +786,9 @@ function hasActiveFilters() {
 function renderSubjectsHint() {
   const base = state.mathBase ? ' Базовую математику вузы не засчитывают: покажем программы, где она не нужна.' : '';
   el.subjectsHint.innerHTML = (results.ready
-    ? 'Цифра «+N» у предмета — сколько ещё программ он добавит. Впиши баллы, чтобы увидеть свои шансы.'
-    : 'Русский и математика уже отмечены. Отметь хотя бы один предмет по выбору, и ниже появятся программы.') + base;
-}
-
-/**
- * «Как пользоваться» — это три шага прямо над подбором. Они отмечаются по ходу дела:
- * человек видит и порядок действий, и где он сейчас.
- */
-function renderStepper() {
-  const fits = state.showScores ? results.items.filter((i) => i.margin != null && i.margin >= 0).length : 0;
-  const scoresNote = !state.showScores ? 'необязательно, но покажет шансы'
-    : chancesCounted() ? `проходишь на ${fits.toLocaleString('ru')}` : 'впиши баллы по всем предметам';
-  const steps = [
-    [results.ready, results.ready ? 'готово' : 'отметь хотя бы один по выбору'],
-    [state.showScores, scoresNote],
-    [state.favs.size > 0, state.favs.size ? `в избранном ${state.favs.size}` : 'фильтры, избранное и сравнение'],
-  ];
-  const current = steps.findIndex(([done], i) => !done && (i !== 2 || results.ready));
-  el.stepper.querySelectorAll('[data-step]').forEach((li, i) => {
-    const [done, note] = steps[i];
-    li.classList.toggle('is-done', done);
-    li.classList.toggle('is-current', i === current);
-    li.querySelector('.stepper__n').textContent = done ? '✓' : i + 1;
-    li.querySelector('.stepper__note').textContent = note;
-  });
+    ? '«+N» — сколько ещё программ откроет предмет.'
+    : 'Добавь хотя бы один предмет по выбору.') + base;
+  el.resetSubjects.hidden = state.subjects.size <= LOCKED_SUBJECTS.length && !state.mathBase && !Object.keys(state.myScores).length;
 }
 
 function renderSummary() {
@@ -857,6 +796,9 @@ function renderSummary() {
   el.mShow.textContent = results.ready
     ? (found ? `Показать ${found.toLocaleString('ru')} ${pluralize(found, 'программу', 'программы', 'программ')}` : 'Ничего не нашлось')
     : 'Сначала выбери предметы';
+  // Пока нет ни одной программы, искать и фильтровать нечего: панель появится вместе со списком.
+  el.fbar.hidden = !results.ready;
+  el.tools.hidden = !results.ready;
   if (!results.ready) {
     el.summary.textContent = 'Здесь появятся программы, когда отметишь предметы';
     return;
@@ -866,28 +808,14 @@ function renderSummary() {
   const fits = state.showScores ? results.items.filter((i) => i.margin != null && i.margin >= 0).length : 0;
   // Пока не вписаны баллы по всем экзаменам хоть одной программы, «проходишь на 0» звучит как приговор.
   const chances = !state.showScores ? ''
+    : state.fits ? ', куда хватает твоих баллов'
     : chancesCounted() ? `, проходишь на ${fits ? `<mark>${fits.toLocaleString('ru')}</mark>` : '0'}`
       : '. Чтобы посчитать шансы, впиши баллы по всем своим предметам';
+  const toggle = state.fits ? ' <button type="button" class="linkbtn" data-fits>Показать все</button>'
+    : fits && fits < n ? ' <button type="button" class="linkbtn" data-fits>Показать только их</button>' : '';
   el.summary.innerHTML = n
-    ? `<b>${n.toLocaleString('ru')}</b> ${pluralize(n, 'программа', 'программы', 'программ')} в <b>${unis}</b> ${pluralize(unis, 'вузе', 'вузах', 'вузах')}${chances}`
-    : 'Ничего не нашлось';
-}
-
-/** Заметное предложение показать только программы, куда хватает баллов (то же, что «Хватает моих баллов»). */
-function renderFitsBar() {
-  const bar = $('fitsBar');
-  const fits = results.ready && state.showScores ? results.items.filter((i) => i.margin != null && i.margin >= 0).length : 0;
-  const total = results.ready ? results.items.length : 0;
-  if (state.fits && total) {
-    bar.innerHTML = `<span>Показаны только программы, куда хватает твоих баллов: <b>${total.toLocaleString('ru')}</b></span>
-      <button type="button" class="btn btn--ghost btn--sm" data-fits>Показать все</button>`;
-  } else if (!state.fits && fits && fits < total) {
-    bar.innerHTML = `<span>Ты проходишь на <mark>${fits.toLocaleString('ru')}</mark> ${pluralize(fits, 'программу', 'программы', 'программ')} из ${total.toLocaleString('ru')}.</span>
-      <button type="button" class="btn btn--primary btn--sm" data-fits>Показать только их</button>`;
-  } else {
-    bar.innerHTML = '';
-  }
-  bar.hidden = !bar.innerHTML;
+    ? `<b>${n.toLocaleString('ru')}</b> ${pluralize(n, 'программа', 'программы', 'программ')} в <b>${unis}</b> ${pluralize(unis, 'вузе', 'вузах', 'вузах')}${chances}${toggle}`
+    : `Ничего не нашлось${toggle}`;
 }
 
 /** Посчитана ли сумма баллов хотя бы для одной найденной программы. */
@@ -900,8 +828,8 @@ function renderList() {
     el.list.innerHTML = '';
     el.empty.hidden = false;
     el.empty.innerHTML = `
-      <p class="empty__title">Отметь хотя бы один предмет по выбору</p>
-      <p>Русский и математика уже учтены, они обязательны. Цифра «+N» на предмете подскажет, сколько программ он откроет.</p>`;
+      <p class="empty__title">Осталось добавить предмет</p>
+      <p>Отметь хотя бы один предмет по выбору, и здесь появятся программы, куда с ним берут.</p>`;
     return;
   }
   if (!results.items.length) {
@@ -926,7 +854,7 @@ function renderList() {
     ? slice.map((g) => renderUniRow(g, state))
     : slice.map((item) => renderCard(item, index, state, selected));
   const hint = state.view === 'programs' && page === 1 ? strategyHint() : '';
-  if (hint && html.length > HINT_AT + 2) html.splice(HINT_AT, 0, hint);
+  if (hint) html.push(hint); // в конце списка: посреди карточек она сбила бы ряды
   el.list.innerHTML = html.join('');
   renderPager(pages, rows.length, state.view === 'unis' ? ['вуз', 'вуза', 'вузов'] : ['программа', 'программы', 'программ']);
 }
@@ -942,8 +870,8 @@ function strategyHint() {
   return `
   <li class="hint-card">
     <p class="hint-card__text"><b>Твои баллы проходят на ${fits.toLocaleString('ru')} ${pluralize(fits, 'программу', 'программы', 'программ')}.</b>
-      Не знаешь, какие выбрать? Опиши ИИ-помощнику, чего хочешь, и он сузит список.</p>
-    <button type="button" class="btn btn--primary btn--sm" data-ask>Спросить ИИ</button>
+      Не знаешь, какие выбрать? В Премиуме ИИ-помощник подскажет, куда подать.</p>
+    <button type="button" class="btn btn--primary btn--sm" data-premium>Попробовать Премиум</button>
     <button type="button" class="icon-btn" data-dismiss-hint aria-label="Скрыть подсказку">${icon('x')}</button>
   </li>`;
 }
@@ -1039,7 +967,6 @@ function syncCollections() {
     b.setAttribute('aria-pressed', String(on));
     b.querySelector('span').textContent = on ? 'В сравнении' : 'Сравнить';
   });
-  renderStepper();
 }
 
 function itemFor(p) {
