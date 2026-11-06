@@ -80,7 +80,9 @@ function mountIcons(root = document) {
 function setupStatic() {
   const { counts, isDemo, generatedAt, source, years } = index.meta;
   const programs = counts.programs;
-  el.heroStats.innerHTML = `<b>${programs.toLocaleString('ru')} ${pluralize(programs, 'программа', 'программы', 'программ')}</b>${years.length ? ', реальные проходные' : ''}`;
+  const unis = counts.universities;
+  el.heroStats.innerHTML = `<b>${programs.toLocaleString('ru')} ${pluralize(programs, 'программа', 'программы', 'программ')}</b>
+    в ${unis} ${pluralize(unis, 'вузе', 'вузах', 'вузах')}${years.length ? `, реальные проходные ${years.join(', ')} года` : ''}`;
   el.demoBanner.hidden = !isDemo;
 
   const date = generatedAt ? new Date(generatedAt).toLocaleDateString('ru', { day: 'numeric', month: 'long', year: 'numeric' }) : '—';
@@ -263,6 +265,7 @@ function bindEvents() {
 
   el.premiumBtn.addEventListener('click', openPremium);
   $('promoTry').addEventListener('click', openPremium);
+  $('promoTryPhone').addEventListener('click', openPremium);
   el.premium.addEventListener('click', (e) => {
     if (e.target === el.premium || e.target.closest('[data-close]')) el.premium.close();
   });

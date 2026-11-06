@@ -795,7 +795,7 @@ body.has-cmpbar .footer { padding-bottom: 6rem; }
 .hero .intro { padding-top: 1.7rem; padding-bottom: 1.7rem; }
 .hero h1 { font-size: clamp(1.9rem, 3.6vw, 2.75rem); line-height: 1.2; }
 .intro__eyebrow { margin-bottom: 0.45rem; font-size: 0.78rem; }
-.hero .intro__sub { margin-top: 0.6rem; font-size: 1rem; }
+.hero .intro__sub { max-width: none; margin-top: 0.6rem; font-size: 1rem; }
 .hero .ask { margin-top: 1.25rem; }
 .ask__tags { position: absolute; top: -0.72rem; left: 0.9rem; display: flex; gap: 0.3rem; }
 .ask__badge { line-height: 1.5; }
@@ -851,5 +851,13 @@ body.has-cmpbar .footer { padding-bottom: 6rem; }
   #cards .card__foot { padding-top: 0.45rem; }
   #cards .chance { gap: 0.25rem; padding: 0.35rem 0.6rem; }
   #cards .chance--none { padding: 0; }
+}
+
+/* ---------- отличие от каталогов и цена на телефоне ---------- */
+.who__diff { margin-top: 0.75rem; font-size: 0.92rem; line-height: 1.4; color: var(--muted); }
+.who__diff b { color: var(--text-strong); }
+.who__price { display: none; }
+@media (max-width: 720px) {
+  .who__price { display: block; margin-top: 0.5rem; font-size: 0.92rem; line-height: 1.4; color: var(--muted); }
 }
 
