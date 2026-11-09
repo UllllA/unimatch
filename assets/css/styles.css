@@ -397,10 +397,11 @@ main { position: relative; isolation: isolate; }
 
 /* ---------- карточки программ ---------- */
 .cards { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: 0.75rem; }
+.cards:not(.cards--unis):not(.cards--one) { grid-auto-rows: 1fr; }
 .card {
   display: flex; flex-direction: column; gap: 0.45rem; padding: 0.95rem 1rem 0.8rem;
   background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
-  transition: border-color 0.15s, box-shadow 0.15s; content-visibility: auto; contain-intrinsic-size: auto 290px;
+  transition: border-color 0.15s, box-shadow 0.15s; content-visibility: auto; contain-intrinsic-size: auto 300px;
 }
 .card:hover { border-color: var(--border-strong); box-shadow: var(--shadow-md); }
 .card__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem; }
@@ -417,7 +418,7 @@ main { position: relative; isolation: isolate; }
 .card__code { font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
 .flag { padding: 0.05rem 0.45rem; border: 1px solid var(--border-strong); border-radius: 5px; font-size: 0.72rem; font-weight: 600; color: var(--muted); }
 .flag--note { border-color: var(--warn); color: var(--warn); }
-.exams { font-size: 0.86rem; line-height: 1.5; }
+.exams { font-size: 0.86rem; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .exams__label {
   margin-right: 0.2rem; padding: 0.02rem 0.3rem; border: 1px solid var(--border-strong); border-radius: 4px;
   font-size: 0.66rem; font-weight: 800; letter-spacing: 0.06em; color: var(--muted); vertical-align: 1px;
@@ -838,11 +839,11 @@ body.has-cmpbar .footer { padding-bottom: 6rem; }
   .results__sticky .fbar::before { content: none; }
 }
 
-/* ---------- два ряда программ на экран: карточки одной высоты ---------- */
+/* ---------- компактные карточки на высоких экранах ---------- */
 @media (min-width: 1000px) and (min-height: 880px) {
   #cards { row-gap: 12px; }
   #cards .card {
-    height: calc((100vh - var(--topbar-h) - var(--bar-h, 150px) - 32px) / 2); overflow: hidden;
+    overflow: hidden; /* высота не фиксируется: строки одной высоты даёт grid-auto-rows: 1fr */
     gap: 0.3rem; padding: 0.7rem 1rem 0.6rem;
   }
   #cards .card > * { flex-shrink: 0; }
